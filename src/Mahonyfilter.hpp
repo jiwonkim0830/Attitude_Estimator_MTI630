@@ -14,18 +14,17 @@ private:
     double Kp, Ki, Ka, Km;
     Quaterniond quat_prev, quat;
     Matrix3d R_hat0;
-    bool isInitialized;
     Vector3d world_gravity;
     Vector3d world_mag;
 
 public:
     MahonyFilter(double Kp_input, double Ki_input, double Ka_input, double Km_input, double dt_input, Vector3d measured_mag)
-    : Kp(Kp_input), Ki(Ki_input), Ka(Ka_input), Km(Km_input), dt(dt_input), quat_prev(1, 0, 0, 0), isInitialized{false},
+    : Kp(Kp_input), Ki(Ki_input), Ka(Ka_input), Km(Km_input), dt(dt_input), quat_prev(Quaterniond::Identity()),
       world_gravity(0, 0, 1), world_mag(measured_mag)
     {
     }
 
-    Matrix3d getSkew(const Vector3d &vec)
+    Matrix3d getSkewFromVec(const Vector3d &vec)
     {
         Matrix3d mat; mat.setZero();
         mat << 0, vec(2), vec(1),
@@ -34,14 +33,14 @@ public:
         return mat;
     }
 
-    Vector3d getVec(const Matrix3d &mat)
+    Vector3d getVecFromSkew(const Matrix3d &mat)
     {
         Vector3d vec; vec.setZero();
         vec << mat(2, 1), mat(0, 2), mat(1,0);
         return vec;
     }
 
-    Quaterniond getQuat(const Vector3d &vec)
+    Quaterniond getQuatFromVec(const Vector3d &vec)
     {
         Quaterniond quat; quat.setIdentity();
         quat.w() = 0;
@@ -53,7 +52,7 @@ public:
     {
         Matrix4d omega; omega.setZero();
         omega << 0,     -vec.transpose(),
-                vec,    getSkew(vec);
+                vec,    getSkewFromVec(vec);
         return omega;
     }
 
@@ -89,17 +88,12 @@ public:
 
     void Estimate(const Vector3d &ang_vel_measured, const Vector3d &normalized_acc_measure, const Vector3d &normalized_mag_measure)
     {
+        Vector3d acc_hat = TransformByQuat(quat_prev, normalized_acc_measure);
+        Vector3d mag_hat = TransformByQuat(quat_prev, normalized_mag_measure);
         
-        if (!isInitialized)
-        {
-            quat_prev = Quaterniond::Identity();
-        }
-
-        else
-        {
-            Vector3d acc_hat = TransformByQuat(quat_prev, normalized_acc_measure);
-            Vector3d mag_hat = TransformByQuat(quat_prev, normalized_mag_measure);
-        }
+        Vector3d correction_term = -getVecFromSkew((Ka/2)*(normalized_acc_measure*acc_hat.transpose() - acc_hat*normalized_acc_measure.transpose())
+                                                   (Km/2)*(normalized_mag_measure*acc_hat.transpose() - mag_hat*normalized_acc_measure.transpose()));
+        
     }
 
 };
