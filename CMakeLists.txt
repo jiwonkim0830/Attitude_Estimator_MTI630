@@ -25,8 +25,8 @@ link_libraries(${catkin_LIBRARIES})
 
 include_directories(
   ${EIGEN3_INCLUDE_DIRS}
-  ../include
-  ../include/xsensdeviceapi
+  ../../include
+  ../../include/xsensdeviceapi
 )
 
 link_libraries(
@@ -36,7 +36,7 @@ link_libraries(
 )
 
 link_directories(
-  ../lib
+  ../../lib
 )
 
 add_executable(main src/main.cpp)
