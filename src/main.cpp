@@ -1,39 +1,10 @@
-//  Copyright (c) 2003-2021 Xsens Technologies B.V. or subsidiaries worldwide.
-//  All rights reserved.
-//  
-//  Redistribution and use in source and binary forms, with or without modification,
-//  are permitted provided that the following conditions are met:
-//  
-//  1.	Redistributions of source code must retain the above copyright notice,
-//  	this list of conditions, and the following disclaimer.
-//  
-//  2.	Redistributions in binary form must reproduce the above copyright notice,
-//  	this list of conditions, and the following disclaimer in the documentation
-//  	and/or other materials provided with the distribution.
-//  
-//  3.	Neither the names of the copyright holders nor the names of their contributors
-//  	may be used to endorse or promote products derived from this software without
-//  	specific prior written permission.
-//  
-//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
-//  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-//  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
-//  THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-//  SPECIAL, EXEMPLARY OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-//  OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-//  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY OR
-//  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-//  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.THE LAWS OF THE NETHERLANDS 
-//  SHALL BE EXCLUSIVELY APPLICABLE AND ANY DISPUTES SHALL BE FINALLY SETTLED UNDER THE RULES 
-//  OF ARBITRATION OF THE INTERNATIONAL CHAMBER OF COMMERCE IN THE HAGUE BY ONE OR MORE 
-//  ARBITRATORS APPOINTED IN ACCORDANCE WITH SAID RULES.
-//  
-
-//--------------------------------------------------------------------------------
-// Xsens device API C++ example MTi receive data.
-//--------------------------------------------------------------------------------
 #include "CallbackHandler.hpp"
-#include "Ros_publisher.hpp"
+#include "RosRawDataPublisher.hpp"
+#include <Eigen/Dense>
+#include "Mahonyfilter.hpp"
+#include <chrono>
+using namespace std;
+using namespace Eigen;
 //--------------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
@@ -91,7 +62,7 @@ int main(int argc, char** argv)
 	device->addCallbackHandler(&callback);
 
 
-//#################################################### Configuration ###################################################
+//####################################################### Configuration ########################################################
 	// Put the device into configuration mode before configuring the device
 	cout << "Putting device into configuration mode..." << endl;
 	if (!device->gotoConfig())
@@ -107,7 +78,7 @@ int main(int argc, char** argv)
 		//configArray.push_back(XsOutputConfiguration(XDI_Quaternion, 100));
         configArray.push_back(XsOutputConfiguration(XDI_AccelerationHR, 0xFFFF));
 		configArray.push_back(XsOutputConfiguration(XDI_RateOfTurnHR, 0xFFFF));
-		configArray.push_back(XsOutputConfiguration(XDI_MagneticField, 100));
+		configArray.push_back(XsOutputConfiguration(XDI_MagneticField, 0xFFFF));
 	}
 
 	else
@@ -125,26 +96,72 @@ int main(int argc, char** argv)
 	else
 		cout << "Created a log file: " << logFileName.c_str() << endl;
 
-// ##################################################### For ROS Publish ###############################################
+
 	ros::init(argc, argv, "visualize_node");
-	Ros_Publisher ros_publisher;
-// ##################################################### Measurement #################################################
+	RosRawDataPublisher ros_raw_data_publisher;
+
 	cout << "Putting device into measurement mode..." << endl;
 	if (!device->gotoMeasurement())
 		return handleError("Could not put device into measurement mode. Aborting.");
 
-	XsVector accHR;
-	XsVector gyrHR;
-	XsVector mag;
-
-	cout << "\nMain loop. Recording data for 10 seconds." << endl;
+	cout << "\nMain loop." << endl;
 	cout << string(79, '-') << endl;
 
-	//int64_t startTime = XsTime::timeStampNow();
-	vector<double> acc_vec;
+	XsVector accHR, gyrHR, mag;
+	Vector3d AccMeasured = Vector3d::Zero();
+	Vector3d GyrMeasured = Vector3d::Zero();
+	Vector3d MagMeasured = Vector3d::Zero();
+//##################################################### for filter initialize #################################################
+	bool isMahonyAccInitialized = false;
+	bool isMahonyMagInitialized = false;
+	Vector3d firstAcc;
+	Vector3d firstMag;
 
+	while (!isMahonyAccInitialized || !isMahonyMagInitialized)
+	{
+		if (callback.packetAvailable())
+		{
+			XsDataPacket packet = callback.getNextPacket();
+
+			if (packet.containsAccelerationHR())
+			{
+				accHR = packet.accelerationHR();
+				cout << "\r"
+					<< "AccHR X:" << accHR[0]
+					<< ", AccHR Y:" << accHR[1]
+					<< ", AccHR Z:" << accHR[2] << endl;
+				firstAcc << accHR[0], accHR[1], accHR[2];
+				firstAcc.normalize();
+				isMahonyAccInitialized = true;
+			}
+
+			if (packet.containsCalibratedMagneticField())
+			{
+				mag = packet.calibratedMagneticField();
+				cout << "Mag X:" << mag[0]
+					<< ", Mag Y:" << mag[1]
+					<< ", Mag Z:" << mag[2] << endl;
+				firstMag << mag[0], mag[1], mag[2];
+				firstMag.normalize();
+				isMahonyMagInitialized = true;
+			}
+		}
+	}
+	cout << "Filter Initialized !" << endl;
+	cout << "FIrst acc : " << firstAcc[0] << " " << firstAcc[1] << " " << firstAcc[2] << endl;
+	cout << "FIrst mag : " << firstMag[0] << " " << firstMag[1] << " " << firstMag[2] << endl;
+	MahonyFilter mahony(1, 0.3, 1, 0.5, 1e-3, firstAcc, firstMag);
+
+//############################################## Loop time check ###############################################################
+	using Framerate = chrono::duration<chrono::steady_clock::rep, std::ratio<1, 1000>>;
+	chrono::steady_clock::time_point start = chrono::steady_clock::now();
+	chrono::steady_clock::time_point next = chrono::steady_clock::now(); + Framerate{1};
+	chrono::duration<double, nano> duration;
+
+//#################################################### Measurement  ############################################################
 	//while (XsTime::timeStampNow() - startTime <= 10000)
-	while (1)
+	int count =  0;
+	while (count < 10)
 	{
 		if (callback.packetAvailable())
 		{
@@ -165,11 +182,12 @@ int main(int argc, char** argv)
 			{
 				cout << endl; 
 				accHR = packet.accelerationHR();
-				acc_vec = accHR.toVector();
 				cout << "\r"
 					<< "AccHR X:" << accHR[0]
 					<< ", AccHR Y:" << accHR[1]
 					<< ", AccHR Z:" << accHR[2];
+				AccMeasured(0) = accHR[0]; AccMeasured(1) = accHR[1]; AccMeasured(2) = accHR[2];
+				AccMeasured.normalize();
 			}
 
 			if (packet.containsRateOfTurnHR())
@@ -177,26 +195,39 @@ int main(int argc, char** argv)
 
 				cout << endl; 
 				gyrHR = packet.rateOfTurnHR();
-				//gyro_vec = gyrHR.toVector();
 				cout << "GyrHR X:" << gyrHR[0]
 					<< ", GyrHR Y:" << gyrHR[1]
 					<< ", GyrHR Z:" << gyrHR[2];
+				GyrMeasured(0) = gyrHR[0]; GyrMeasured(1) = gyrHR[1]; GyrMeasured(2) = gyrHR[2];
 			}
 
 			if (packet.containsCalibratedMagneticField())
 			{
 				cout << endl; 
 				mag = packet.calibratedMagneticField();
-				//mag_vec = mag.toVector();
 				cout << "Mag X:" << mag[0]
 					<< ", Mag Y:" << mag[1]
 					<< ", Mag Z:" << mag[2];
+				MagMeasured(0) = mag[0]; MagMeasured(1) = mag[1]; MagMeasured(2) = mag[2];
+				MagMeasured.normalize();
 			}
-
-			cout << flush;
 		}
+//###################################################### Filtering ############################################################
+		mahony.Estimate(GyrMeasured, AccMeasured, MagMeasured);
+		mahony.RosPublishQuaternion();
+		mahony.PrintQuaternion();
+
+		//to make loop Hz constant (1000Hz)
+		while (chrono::steady_clock::now() < next);
+		duration = chrono::steady_clock::now() - start;
+		cout << endl << "duration time " << duration.count();
+		start = chrono::steady_clock::now();
+		next += Framerate{1};
+		cout << flush;
+		
 		XsTime::msleep(0);
-		ros_publisher.RosPublic(accHR, gyrHR, mag);//, gyrHR, mag);
+		ros_raw_data_publisher.RosRawDataPublish(accHR, gyrHR, mag);//, gyrHR, mag);
+		++count;
 	}
 	
 	cout << "\n" << string(79, '-') << "\n";

@@ -5,12 +5,11 @@
 #include <vector>
 
 #include <ros/ros.h>
-#include <sensor_msgs/Imu.h>
 #include <visualization_msgs/Marker.h>
 
 using namespace std;
 
-class Ros_Publisher
+class RosRawDataPublisher
 {
 private:
     ros::NodeHandle n;
@@ -24,7 +23,7 @@ private:
 
 
 public:
-    Ros_Publisher()
+    RosRawDataPublisher()
     {
         acc_pub = n.advertise<visualization_msgs::Marker>("/measured_acc_data", 5);
         gyr_pub = n.advertise<visualization_msgs::Marker>("/measured_gyr_data", 5);
@@ -32,7 +31,7 @@ public:
     }
 
 
-    void RosPublic(const XsVector& acc, const XsVector& gyro, const XsVector& mag)
+    void RosRawDataPublish(const XsVector& acc, const XsVector& gyro, const XsVector& mag)
 	{
 		if (acc.size() > 0)
         {
@@ -103,56 +102,6 @@ public:
             mag_msgs.color.b = 1.0;
             mag_pub.publish(mag_msgs);
         }
-        // imu_msg.header.frame_id = "world";
-        // imu_msg.header.stamp = ros::Time::now();
-        // imu_msg.orientation.x = 0;
-        // imu_msg.orientation.y = 0;
-        // imu_msg.orientation.z = 0;
-        // imu_msg.orientation.w = 1;
-
-		// if (acc.size() > 0)
-        // {
-        //     imu_msg.linear_acceleration.x = acc[0];
-        //     imu_msg.linear_acceleration.y = acc[1];
-        //     imu_msg.linear_acceleration.z = acc[2];     
-        // }
-
-        // else if (gyro.size() > 0)
-        // {
-        //     imu_msg.angular_velocity.x = gyro[0];
-        //     imu_msg.angular_velocity.y = gyro[1];
-        //     imu_msg.angular_velocity.z = gyro[2];
-        // }
-
-        // else
-        // {
-        //     imu_msg.linear_acceleration.x = 0;
-        //     imu_msg.linear_acceleration.y = 0;
-        //     imu_msg.linear_acceleration.z = 0;
-        //     imu_msg.angular_velocity.x = 0;
-        //     imu_msg.angular_velocity.y = 0;
-        //     imu_msg.angular_velocity.z = 0;
-        // }
-
-		// mag_msg.header.frame_id = "world";
-        // mag_msg.header.stamp = ros::Time::now();
-
-        // if (mag.size() > 0)
-        // {
-        //     mag_msg.magnetic_field.x = mag[0];
-        //     mag_msg.magnetic_field.y = mag[1];
-        //     mag_msg.magnetic_field.z = mag[2];
-        // }
-
-        // else
-        // {
-        //     mag_msg.magnetic_field.x = 0;
-        //     mag_msg.magnetic_field.y = 0;
-        //     mag_msg.magnetic_field.z = 0;
-        // }
-
-        // imu_pub.publish(imu_msg);
-        // mag_pub.publish(mag_msg);
 	}
     
 

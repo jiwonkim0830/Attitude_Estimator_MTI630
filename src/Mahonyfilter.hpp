@@ -1,10 +1,11 @@
 #pragma once
 
 #include <iostream>
-#include <vector>
-#include <mutex>
 #include <Eigen/Dense>
+#include <ros/ros.h>
+#include <visualization_msgs/Marker.h>
 
+using namespace std;
 using namespace Eigen;
 
 class MahonyFilter
@@ -12,16 +13,22 @@ class MahonyFilter
 private:
     double dt;
     double Kp, Ki, Ka, Km;
-    Quaterniond quat_prev, quat;
+    Quaterniond quat_prev, quat_now, inv_quat_prev;
     Matrix3d R_hat0;
-    Vector3d world_gravity;
-    Vector3d world_mag;
+    Vector3d world_gravity, world_mag;
+    Vector3d acc_hat, mag_hat, correction_term, A;
+    Matrix4d Omega_A;
+
+    ros::NodeHandle n;
+	ros::Publisher quat_pub;
+    visualization_msgs::Marker quat_msgs;
 
 public:
-    MahonyFilter(double Kp_input, double Ki_input, double Ka_input, double Km_input, double dt_input, Vector3d measured_mag)
-    : Kp(Kp_input), Ki(Ki_input), Ka(Ka_input), Km(Km_input), dt(dt_input), quat_prev(Quaterniond::Identity()),
-      world_gravity(0, 0, 1), world_mag(measured_mag)
+    MahonyFilter(double Kp_input, double Ki_input, double Ka_input, double Km_input, double dt_input, Vector3d measured_acc, Vector3d measured_mag)
+    : Kp(Kp_input), Ki(Ki_input), Ka(Ka_input), Km(Km_input), dt(dt_input), quat_prev(Quaterniond::Identity()), quat_now(Quaterniond::Identity()),
+      world_gravity(measured_acc), world_mag(measured_mag)
     {
+        quat_pub = n.advertise<visualization_msgs::Marker>("/mahony_quat", 5);
     }
 
     Matrix3d getSkewFromVec(const Vector3d &vec)
@@ -48,7 +55,7 @@ public:
         return quat;
     }
 
-    Matrix4d getOmega(const Vector3d &vec)
+    Matrix4d getOmegaFromVec(const Vector3d &vec)
     {
         Matrix4d omega; omega.setZero();
         omega << 0,     -vec.transpose(),
@@ -58,42 +65,81 @@ public:
 
     Matrix4d Euler_Rodrigues(const Vector3d vec)
     {
-        Matrix4d ER_mat = cos(vec.norm()*dt/2)*Matrix4d::Identity() + (1/vec.norm())*sin(vec.norm()*dt/2)*getOmega(vec);
+        Matrix4d ER_mat = cos(vec.norm()*dt/2)*Matrix4d::Identity() + (1/vec.norm())*sin(vec.norm()*dt/2)*getOmegaFromVec(vec);
         return ER_mat;
     }
 
     Matrix4d First_Order_Approx(const Vector3d vec)
     {
-        Matrix4d FO_mat = Matrix4d::Identity() + (1/2)*getOmega(vec)*dt;
+        Matrix4d FO_mat = Matrix4d::Zero();
+        FO_mat = Matrix4d::Identity() + (1/2)*getOmegaFromVec(vec)*dt;
         return FO_mat;
     }
 
-    Quaterniond QuatMult(const Quaterniond &q1, const Quaterniond &q2)
-    {
-        Quaterniond result;
-        result.w() = q1.w()*q2.w() - q1.vec().dot(q2.vec());
-        result.vec() = q1.w()*q2.vec() + q2.w()*q1.vec() + q1.vec().cross(q2.vec());
-
-        return result;       
-    }
 
     Vector3d TransformByQuat(const Quaterniond &q, const Vector3d &vec)
     {
-        Quaterniond quat_by_vec; quat_by_vec.w()=0; quat_by_vec.vec() = vec;
+        Quaterniond quat_by_vec = Quaterniond::Identity(); quat_by_vec.w()=0; quat_by_vec.vec() = vec;
         Quaterniond result_quat;
-        result_quat = QuatMult(QuatMult(q, quat_by_vec), q.inverse());
+        result_quat = (q * quat_by_vec) * q.inverse();
         return result_quat.vec();
+    }
 
+    Quaterniond MatQuatMult(const Matrix4d &mat, const Quaterniond &quat)
+    {
+        Quaterniond result; result = Quaterniond::Identity();
+        result.w() = mat(0,0)*quat.w() + mat(0,1)*quat.x() + mat(0,2)*quat.y() + mat(0,3)*quat.z();
+        result.x() = mat(1,0)*quat.w() + mat(1,1)*quat.x() + mat(1,2)*quat.y() + mat(1,3)*quat.z(); 
+        result.y() = mat(2,0)*quat.w() + mat(2,1)*quat.x() + mat(2,2)*quat.y() + mat(2,3)*quat.z(); 
+        result.z() = mat(3,0)*quat.w() + mat(3,1)*quat.x() + mat(3,2)*quat.y() + mat(3,3)*quat.z();  
+
+        return result;
     }
 
     void Estimate(const Vector3d &ang_vel_measured, const Vector3d &normalized_acc_measure, const Vector3d &normalized_mag_measure)
     {
-        Vector3d acc_hat = TransformByQuat(quat_prev, normalized_acc_measure);
-        Vector3d mag_hat = TransformByQuat(quat_prev, normalized_mag_measure);
+        inv_quat_prev = quat_prev.inverse();
+        mag_hat = TransformByQuat(inv_quat_prev, world_mag);
+        acc_hat = TransformByQuat(inv_quat_prev, world_gravity);
+
+        correction_term = -getVecFromSkew((Ka/2)*(normalized_acc_measure*(acc_hat.transpose()) - acc_hat*(normalized_acc_measure.transpose()))
+                                                   + (Km/2)*(normalized_mag_measure*(acc_hat.transpose()) - mag_hat*(normalized_acc_measure.transpose())));
         
-        Vector3d correction_term = -getVecFromSkew((Ka/2)*(normalized_acc_measure*acc_hat.transpose() - acc_hat*normalized_acc_measure.transpose())
-                                                   (Km/2)*(normalized_mag_measure*acc_hat.transpose() - mag_hat*normalized_acc_measure.transpose()));
-        
+        A = ang_vel_measured + (Kp+Ki*dt)*correction_term;
+        Omega_A = First_Order_Approx(A);
+        quat_now = MatQuatMult(Omega_A, quat_prev);
+        quat_now.normalize();
+        quat_prev = quat_now;
     }
 
+    void PrintQuaternion()
+    {
+        cout << " quaternion : "<<quat_now.w() << " " << quat_now.x() << " " << quat_now.y() << " " << quat_now.z() << endl;
+    }
+
+    void RosPublishQuaternion()
+    {
+        quat_msgs.header.frame_id = "world";
+        quat_msgs.header.stamp = ros::Time();
+        quat_msgs.ns = "my_namespace";
+        quat_msgs.id = 0;
+        quat_msgs.type = visualization_msgs::Marker::CUBE;
+        quat_msgs.action = visualization_msgs::Marker::ADD;
+        quat_msgs.pose.position.x = 0.0;
+        quat_msgs.pose.position.y = 0.0;
+        quat_msgs.pose.position.z = 0.0;
+        quat_msgs.pose.orientation.x = quat_prev.x();
+        quat_msgs.pose.orientation.y = quat_prev.y(); 
+        quat_msgs.pose.orientation.z = quat_prev.z();
+        quat_msgs.pose.orientation.w = quat_prev.w();
+        quat_msgs.scale.x = 1;
+        quat_msgs.scale.y = 1;
+        quat_msgs.scale.z = 1;
+        quat_msgs.color.a = 1.0;
+        quat_msgs.color.r = 0.0;
+        quat_msgs.color.g = 1.0;
+        quat_msgs.color.b = 0.0;
+
+        quat_pub.publish(quat_msgs);
+    }
 };
