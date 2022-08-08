@@ -9,6 +9,7 @@ using namespace Eigen;
 int main(int argc, char** argv)
 {
 // ################################################ Scanning & Setting ################################################
+	cout<<fixed; cout.precision(6);
 	cout << "Creating XsControl object..." << endl;
 	XsControl* control = XsControl::construct();
 	assert(control != nullptr);
@@ -150,6 +151,7 @@ int main(int argc, char** argv)
 	cout << "Filter Initialized !" << endl;
 	cout << "FIrst acc : " << firstAcc[0] << " " << firstAcc[1] << " " << firstAcc[2] << endl;
 	cout << "FIrst mag : " << firstMag[0] << " " << firstMag[1] << " " << firstMag[2] << endl;
+	
 	MahonyFilter mahony(1, 0.3, 1, 0.5, 1e-3, firstAcc, firstMag);
 
 //############################################## Loop time check ###############################################################
@@ -159,9 +161,11 @@ int main(int argc, char** argv)
 	chrono::duration<double, nano> duration;
 
 //#################################################### Measurement  ############################################################
-	//while (XsTime::timeStampNow() - startTime <= 10000)
-	int count =  0;
-	while (count < 10)
+	// int64_t startTime = XsTime::timeStampNow();
+	// while (XsTime::timeStampNow() - startTime <= 5000)
+	// int count =  0;
+	// while (count < 10)
+	while (1)
 	{
 		if (callback.packetAvailable())
 		{
@@ -227,7 +231,7 @@ int main(int argc, char** argv)
 		
 		XsTime::msleep(0);
 		ros_raw_data_publisher.RosRawDataPublish(accHR, gyrHR, mag);//, gyrHR, mag);
-		++count;
+		//++count;
 	}
 	
 	cout << "\n" << string(79, '-') << "\n";
