@@ -63,7 +63,7 @@ int main(int argc, char** argv)
 	device->addCallbackHandler(&callback);
 
 
-//####################################################### Configuration ########################################################
+//######################################################## Configuration #########################################################
 	// Put the device into configuration mode before configuring the device
 	cout << "Putting device into configuration mode..." << endl;
 	if (!device->gotoConfig())
@@ -112,7 +112,7 @@ int main(int argc, char** argv)
 	Vector3d AccMeasured = Vector3d::Zero();
 	Vector3d GyrMeasured = Vector3d::Zero();
 	Vector3d MagMeasured = Vector3d::Zero();
-//##################################################### for filter initialize #################################################
+//##################################################### for filter initialize ###################################################
 	bool isMahonyAccInitialized = false;
 	bool isMahonyMagInitialized = false;
 	Vector3d firstAcc;
@@ -151,8 +151,8 @@ int main(int argc, char** argv)
 	cout << "Filter Initialized !" << endl;
 	cout << "FIrst acc : " << firstAcc[0] << " " << firstAcc[1] << " " << firstAcc[2] << endl;
 	cout << "FIrst mag : " << firstMag[0] << " " << firstMag[1] << " " << firstMag[2] << endl;
-	
-	MahonyFilter mahony(1, 0.3, 1, 0.5, 1e-3, firstAcc, firstMag);
+	//to set initial pose as zero
+	MahonyFilter mahony(1, 0.3, 1, 0.5, 1e-3, firstAcc, firstMag); //gain tuning is needed !!
 
 //############################################## Loop time check ###############################################################
 	using Framerate = chrono::duration<chrono::steady_clock::rep, std::ratio<1, 1000>>;

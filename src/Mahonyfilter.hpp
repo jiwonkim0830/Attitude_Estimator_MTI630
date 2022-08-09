@@ -24,9 +24,11 @@ private:
 
 public:
     MahonyFilter(double Kp_input, double Ki_input, double Ka_input, double Km_input, double dt_input, Vector3d measured_acc, Vector3d measured_mag)
+    //Kp, Ki, Ka, Km : gain tuning is needed !!
     : Kp(Kp_input), Ki(Ki_input), Ka(Ka_input), Km(Km_input), dt(dt_input), quat_prev(Quaterniond::Identity()), quat_now(Quaterniond::Identity()),
       inv_quat_prev(Quaterniond::Identity()), acc_hat(measured_acc), mag_hat(measured_mag), correction_term(Vector3d::Zero()), A(Vector3d::Zero()), 
       Omega_A(Matrix4d::Zero()), world_gravity(measured_acc), world_mag(measured_mag)
+    //Set initial pose as (1, 0, 0, 0)
     {
         quat_pub = n.advertise<visualization_msgs::Marker>("/mahony_quat", 5);
     }
@@ -73,9 +75,8 @@ public:
     {
         cout << fixed; cout.precision(6);
         Matrix4d FO_mat = Matrix4d::Zero();
-        Matrix4d OmegaFromVec = getOmegaFromVec(vec);
         //cout << "OmegaFromVec: " << "\n" << OmegaFromVec << endl;
-        FO_mat = Matrix4d::Identity() + 0.5*dt*OmegaFromVec;
+        FO_mat = Matrix4d::Identity() + 0.5*dt*getOmegaFromVec(vec);
         //cout << "FO_mat: " << "\n" << FO_mat << endl;
         return FO_mat;
     }
@@ -84,9 +85,9 @@ public:
     Vector3d TransformByQuat(const Quaterniond &q, const Vector3d &vec)
     {
         Quaterniond quat_by_vec = Quaterniond::Identity(); quat_by_vec.w()=0; quat_by_vec.vec() = vec;
-        Quaterniond result_quat = Quaterniond::Identity(); Vector3d result_vec = Vector3d::Zero();
-        result_quat = (q * quat_by_vec) * q.inverse();
-        result_vec = result_quat.vec();
+
+        Quaterniond result_quat = (q * quat_by_vec) * q.inverse();
+        Vector3d result_vec = result_quat.vec();
         return result_vec;
     }
 
