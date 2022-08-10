@@ -5,7 +5,8 @@
 #include <chrono>
 using namespace std;
 using namespace Eigen;
-//--------------------------------------------------------------------------------
+
+
 int main(int argc, char** argv)
 {
 // ################################################ Scanning & Setting ################################################
@@ -41,6 +42,7 @@ int main(int argc, char** argv)
 			mtPort = portInfo;
 			break;
 		}
+		cout << portInfo << endl;
 	}
 
 	if (mtPort.empty())

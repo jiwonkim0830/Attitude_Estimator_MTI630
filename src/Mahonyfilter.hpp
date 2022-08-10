@@ -11,15 +11,15 @@ using namespace Eigen;
 class MahonyFilter
 {
 private:
-    double dt;
+    const double dt;
     double Kp, Ki, Ka, Km; //filter gain
     Quaterniond quat_prev, quat_now, inv_quat_prev;
     Vector3d acc_hat, mag_hat, correction_term, A; //for correction term
     Matrix4d Omega_A; //for correction term
-    Vector3d world_gravity, world_mag;
+    const Vector3d world_gravity, world_mag;
 
     ros::NodeHandle n;
-	ros::Publisher quat_pub;
+	ros::Publisher quat_pub, quat_pub2;
     visualization_msgs::Marker quat_msgs;
 
 public:
