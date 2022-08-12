@@ -88,15 +88,15 @@ public:
         return omega;
     }
 
-    Matrix3d getRotMatfromQuat(const Vector4d &q)
-    {
-        Matrix3d RotMat; RotMat.setZero();
+    // Matrix3d getRotMatfromQuat(const Vector4d &q)
+    // {
+    //     Matrix3d RotMat; RotMat.setZero();
 
-        RotMat << 2 * (q(0)*q(0) + q(1)*q(1)) - 1, 2 * (q(1)*q(2) - q(0)*q(3)),     2 * (q(1)*q(3) + q(0)*q(2)),
-                  2 * (q(1)*q(2) + q(0)*q(3)),     2 * (q(0)*q(0) + q(2)*q(2)) - 1, 2 * (q(2)*q(3) - q(0)*q(1)),
-                  2 * (q(1)*q(3) - q(0)*q(2)),     2 * (q(2)*q(3) + q(0)*q(1)),     2 * (q(0)*q(0) + q(3)*q(3)) - 1;
-        return RotMat;
-    }
+    //     RotMat << 2 * (q(0)*q(0) + q(1)*q(1)) - 1, 2 * (q(1)*q(2) - q(0)*q(3)),     2 * (q(1)*q(3) + q(0)*q(2)),
+    //               2 * (q(1)*q(2) + q(0)*q(3)),     2 * (q(0)*q(0) + q(2)*q(2)) - 1, 2 * (q(2)*q(3) - q(0)*q(1)),
+    //               2 * (q(1)*q(3) - q(0)*q(2)),     2 * (q(2)*q(3) + q(0)*q(1)),     2 * (q(0)*q(0) + q(3)*q(3)) - 1;
+    //     return RotMat;
+    // }
 
     Matrix4d firstOrderApprox(const Vector3d &ang_vel)
     {
@@ -152,40 +152,40 @@ public:
         
         F = Matrix<double, 6, 10>::Zero();
 
-        F(0,0) = 4*world_gravity(0)*xHat(0) + 2*world_gravity(1)*xHat(3) - 2*world_gravity(2)*xHat(2);  //4*g0*q0 + 2*g1*q3 - 2*g2*q2
-        F(0,1) = 4*world_gravity(0)*xHat(1) + 2*world_gravity(1)*xHat(2) + 2*world_gravity(2)*xHat(3);  //4*g0*q1 + 2*g1*q2 + 2*g2*q3
-        F(0,2) = 2*world_gravity(1)*xHat(1) - 2*world_gravity(2)*xHat(0);                               //2*g1*q1 - 2*g2*q0
-        F(0,3) = 2*world_gravity(1)*xHat(0) + 2*world_gravity(2)*xHat(1);                               //2*g1*q0 + 2*g2*q1
+        F(0,0) = 2*world_gravity(0)*xHat(0) + 2*world_gravity(1)*xHat(3) - 2*world_gravity(2)*xHat(2);  //2*g0*q0 + 2*g1*q3 - 2*g2*q2
+        F(0,1) = 2*world_gravity(0)*xHat(1) + 2*world_gravity(1)*xHat(2) + 2*world_gravity(2)*xHat(3);  //2*g0*q1 + 2*g1*q2 + 2*g2*q3
+        F(0,2) = 2*world_gravity(1)*xHat(1) - 2*world_gravity(0)*xHat(2) - 2*world_gravity(2)*xHat(0);  //2*g1*q1 - 2*g0*q2 - 2*g2*q0
+        F(0,3) = 2*world_gravity(1)*xHat(0) - 2*world_gravity(0)*xHat(3) + 2*world_gravity(2)*xHat(1);  //2*g1*q0 - 2*g0*q3 + 2*g2*q1
         F(0,4) = 1;  F(0,5) = 0;  F(0,6) = 0;  F(0,7) = 0;  F(0,8) = 0;  F(0,9) = 0;                    //1 0 0 0 0 0
 
-        F(1,0) = 4*world_gravity(1)*xHat(0) - 2*world_gravity(0)*xHat(3) + 2*world_gravity(2)*xHat(1);  //4*g1*q0 - 2*g0*q3 + 2*g2*q1
-        F(1,1) = 2*world_gravity(0)*xHat(2) + 2*world_gravity(2)*xHat(0);                               //2*g0*q2 + 2*g2*q0
-        F(1,2) = 2*world_gravity(0)*xHat(1) + 4*world_gravity(1)*xHat(2) + 2*world_gravity(2)*xHat(3);  //2*g0*q1 + 4*g1*q2 + 2*g2*q3
-        F(1,3) = 2*world_gravity(2)*xHat(2) - 2*world_gravity(0)*xHat(0);                               //2*g2*q2 - 2*g0*q0
+        F(1,0) = 2*world_gravity(1)*xHat(0) - 2*world_gravity(0)*xHat(3) + 2*world_gravity(2)*xHat(1);  //2*g1*q0 - 2*g0*q3 + 2*g2*q1
+        F(1,1) = 2*world_gravity(0)*xHat(2) - 2*world_gravity(1)*xHat(1) + 2*world_gravity(2)*xHat(0);  //2*g0*q2 - 2*g1*q1 + 2*g2*q0
+        F(1,2) = 2*world_gravity(0)*xHat(1) + 2*world_gravity(1)*xHat(2) + 2*world_gravity(2)*xHat(3);  //2*g0*q1 + 2*g1*q2 + 2*g2*q3
+        F(1,3) = 2*world_gravity(2)*xHat(2) - 2*world_gravity(1)*xHat(3) - 2*world_gravity(0)*xHat(0);  //2*g2*q2 - 2*g1*q3 - 2*g0*q0
         F(1,4) = 0;  F(1,5) = 1;  F(1,6) = 0;  F(1,7) = 0;  F(1,8) = 0;  F(1,9) = 0;                    //0 1 0 0 0 0
 
-        F(2,0) = 2*world_gravity(0)*xHat(2) - 2*world_gravity(1)*xHat(1) + 4*world_gravity(2)*xHat(0);  //2*g0*q2 - 2*g1*q1 + 4*g2*q0
-        F(2,1) = 2*world_gravity(0)*xHat(3) - 2*world_gravity(1)*xHat(0);                               //2*g0*q3 - 2*g1*q0
-        F(2,2) = 2*world_gravity(0)*xHat(0) + 2*world_gravity(1)*xHat(3);                               //2*g0*q0 + 2*g1*q3
-        F(2,3) = 2*world_gravity(0)*xHat(1) + 2*world_gravity(1)*xHat(2) + 4*world_gravity(2)*xHat(3);  //2*g0*q1 + 2*g1*q2 + 4*g2*q3
+        F(2,0) = 2*world_gravity(0)*xHat(2) - 2*world_gravity(1)*xHat(1) + 2*world_gravity(2)*xHat(0);  //2*g0*q2 - 2*g1*q1 + 2*g2*q0
+        F(2,1) = 2*world_gravity(0)*xHat(3) - 2*world_gravity(1)*xHat(0) - 2*world_gravity(2)*xHat(1);  //2*g0*q3 - 2*g1*q0 - 2*g2*q1
+        F(2,2) = 2*world_gravity(0)*xHat(0) + 2*world_gravity(1)*xHat(3) - 2*world_gravity(2)*xHat(2);  //2*g0*q0 + 2*g1*q3 - 2*g2*q2
+        F(2,3) = 2*world_gravity(0)*xHat(1) + 2*world_gravity(1)*xHat(2) + 2*world_gravity(2)*xHat(3);  //2*g0*q1 + 2*g1*q2 + 2*g2*q3
         F(2,4) = 0;  F(2,5) = 0;  F(2,6) = 1;  F(2,7) = 0;  F(2,8) = 0;  F(2,9) = 0;                    //0 0 1 0 0 0
 
-        F(3,0) = 4*world_mag(0)*xHat(0) + 2*world_mag(1)*xHat(3) - 2*world_mag(2)*xHat(2);              //4*h0*q0 + 2*h1*q3 - 2*h2*q2
-        F(3,1) = 4*world_mag(0)*xHat(1) + 2*world_mag(1)*xHat(2) + 2*world_mag(2)*xHat(3);              //4*h0*q1 + 2*h1*q2 + 2*h2*q3
-        F(3,2) = 2*world_mag(1)*xHat(1) - 2*world_mag(2)*xHat(0);                                       //2*h1*q1 - 2*h2*q0
-        F(3,3) = 2*world_mag(1)*xHat(0) + 2*world_mag(2)*xHat(1);                                       //2*h1*q0 + 2*h2*q1
+        F(3,0) = 2*world_mag(0)*xHat(0) + 2*world_mag(1)*xHat(3) - 2*world_mag(2)*xHat(2);              //2*h0*q0 + 2*h1*q3 - 2*h2*q2
+        F(3,1) = 2*world_mag(0)*xHat(1) + 2*world_mag(1)*xHat(2) + 2*world_mag(2)*xHat(3);              //2*h0*q1 + 2*h1*q2 + 2*h2*q3
+        F(3,2) = 2*world_mag(1)*xHat(1) - 2*world_mag(0)*xHat(2) - 2*world_mag(2)*xHat(0);              //2*h1*q1 - 2*h0*q2 - 2*h2*q0
+        F(3,3) = 2*world_mag(1)*xHat(0) - 2*world_mag(0)*xHat(3) + 2*world_mag(2)*xHat(1);              //2*h1*q0 - 2*h0*q3 + 2*h2*q1
         F(3,4) = 0;  F(3,5) = 0;  F(3,6) = 0;  F(3,7) = 1;  F(3,8) = 0;  F(3,9) = 0;                    //0 0 0 1 0 0
 
-        F(4,0) = 4*world_mag(1)*xHat(0) - 2*world_mag(0)*xHat(3) + 2*world_mag(2)*xHat(1);              //4*h1*q0 - 2*h0*q3 + 2*h2*q1
-        F(4,1) = 2*world_mag(0)*xHat(2) + 2*world_mag(2)*xHat(0);                                       //2*h0*q2 + 2*h2*q0
-        F(4,2) = 2*world_mag(0)*xHat(1) + 4*world_mag(1)*xHat(2) + 2*world_mag(2)*xHat(3);              //2*h0*q1 + 4*h1*q2 + 2*h2*q3
-        F(4,3) = 2*world_mag(2)*xHat(2) - 2*world_mag(0)*xHat(0);                                       //2*h2*q2 - 2*h0*q0
+        F(4,0) = 2*world_mag(1)*xHat(0) - 2*world_mag(0)*xHat(3) + 2*world_mag(2)*xHat(1);              //2*h1*q0 - 2*h0*q3 + 2*h2*q1
+        F(4,1) = 2*world_mag(0)*xHat(2) - 2*world_mag(1)*xHat(1) + 2*world_mag(2)*xHat(0);              //2*h0*q2 - 2*h1*q1 + 2*h2*q0
+        F(4,2) = 2*world_mag(0)*xHat(1) + 2*world_mag(1)*xHat(2) + 2*world_mag(2)*xHat(3);              //2*h0*q1 + 2*h1*q2 + 2*h2*q3
+        F(4,3) = 2*world_mag(2)*xHat(2) - 2*world_mag(1)*xHat(3) - 2*world_mag(0)*xHat(0);              //2*h2*q2 - 2*h1*q3 - 2*h0*q0
         F(4,4) = 0;  F(4,5) = 0;  F(4,6) = 0;  F(4,7) = 0;  F(4,8) = 1;  F(4,9) = 0;                    //0 0 0 0 1 0
 
-        F(5,0) = 2*world_mag(0)*xHat(2) - 2*world_mag(1)*xHat(1) + 4*world_mag(2)*xHat(0);              //2*h0*q2 - 2*h1*q1 + 4*h2*q0
-        F(5,1) = 2*world_mag(0)*xHat(3) - 2*world_mag(1)*xHat(0);                                       //2*h0*q3 - 2*h1*q0
-        F(5,2) = 2*world_mag(0)*xHat(0) + 2*world_mag(1)*xHat(3);                                       //2*g0*q0 + 2*g1*q3
-        F(5,3) = 2*world_mag(0)*xHat(1) + 2*world_mag(1)*xHat(2) + 4*world_mag(2)*xHat(3);              //2*h0*q1 + 2*h1*q2 + 4*h2*q3
+        F(5,0) = 2*world_mag(0)*xHat(2) - 2*world_mag(1)*xHat(1) + 2*world_mag(2)*xHat(0);              //2*h0*q2 - 2*h1*q1 + 2*h2*q0
+        F(5,1) = 2*world_mag(0)*xHat(3) - 2*world_mag(1)*xHat(0) - 2*world_mag(2)*xHat(1);              //2*h0*q3 - 2*h1*q0 - 2*h2*q1
+        F(5,2) = 2*world_mag(0)*xHat(0) + 2*world_mag(1)*xHat(3) - 2*world_mag(2)*xHat(2);              //2*h0*q0 + 2*h1*q3 - 2*h2*q2
+        F(5,3) = 2*world_mag(0)*xHat(1) + 2*world_mag(1)*xHat(2) + 2*world_mag(2)*xHat(3);              //2*h0*q1 + 2*h1*q2 + 2*h2*q3
         F(5,4) = 0;  F(5,5) = 0;  F(5,6) = 0;  F(5,7) = 0;  F(5,8) = 0;  F(5,9) = 1;                    //0 0 1 0 0 0
         //cout << "\nF : \n" << F << endl; 
     }
