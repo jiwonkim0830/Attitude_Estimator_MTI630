@@ -241,7 +241,7 @@ public:
         getMeasurements(acc_measure, mag_measure);  testMeasurements(acc_measure, mag_measure);  getF();  getR();
         //cout << "R : \n" << R << endl; 
 
-        KalmanGain = PHat*F.transpose()*((F*PHat*F.transpose()+R).inverse());
+        KalmanGain = PHat*F.transpose()*((F*PHat*F.transpose() + R).inverse());
         //cout << "Kalman Gain : \n" << KalmanGain << endl; 
 
         x = xHat + KalmanGain*(z - MeasurementModel());
