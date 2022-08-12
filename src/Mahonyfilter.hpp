@@ -17,6 +17,8 @@ private:
     Vector3d acc_hat, mag_hat, correction_term, A; //for correction term
     Matrix4d Omega_A; //for correction term
     const Vector3d world_gravity, world_mag;
+    Vector3d normalized_world_acc; 
+    Vector3d normalized_world_mag;
 
 
     const double threshold_a, threshold_m, threshold_dip;              //thresholds
@@ -37,6 +39,8 @@ public:
       world_dip_angle( acos(measured_acc.dot(measured_mag) / (measured_acc.norm() * measured_mag.norm())) )
     //Set initial pose as (1, 0, 0, 0)
     {
+        normalized_world_acc = measured_acc.normalized();
+        normalized_world_mag = measured_mag.normalized();
     }
 
     Matrix3d getSkewFromVec(const Vector3d &vec)
@@ -67,7 +71,7 @@ public:
     {
         Matrix4d omega; omega.setZero();
         omega << 0,     -vec.transpose(),
-                vec,    getSkewFromVec(vec);
+                vec,    -getSkewFromVec(vec);
         return omega;
     }
 
@@ -111,17 +115,25 @@ public:
     void Estimate(const Vector3d &ang_vel_measured, const Vector3d &acc_measure, const Vector3d &mag_measure)
     {
         cout << fixed; cout.precision(6);
+        Vector3d normalized_acc = acc_measure.normalized();
+        Vector3d normalized_mag = mag_measure.normalized();
+        
 
-        mag_hat = TransformByQuat(inv_quat_prev.inverse(), world_mag.normalized());
-        acc_hat = TransformByQuat(inv_quat_prev.inverse(), world_gravity.normalized());
+        acc_hat = ((quat_prev.toRotationMatrix()).transpose()) * normalized_world_acc;
+        cout << "\nmeasured_acc : " << normalized_acc << endl;
+        cout << "\nacc_hat : " << acc_hat << endl;
+        mag_hat = ((quat_prev.toRotationMatrix()).transpose()) * normalized_world_mag;
+        cout << "\nmeasured_mag : " << normalized_mag << endl;
+        cout << "\nmag_hat : " << mag_hat << endl;
+        
         //cout << "\n" << "Mag hat : " << mag_hat[0] << " " << mag_hat[1] << " " << mag_hat[2] << endl; 
         //cout << "Acc hat : " << acc_hat[0] << " " << acc_hat[1] << " " << acc_hat[2] << endl; 
 
         //dip_angle = acos(((quat_prev.toRotationMatrix()*mag_measure).dot(world_gravity)) / (mag_measure.norm() * world_gravity.norm()));
         //if (fabs(acc_measure.norm() - world_gravity.norm()) < threshold_a && (fabs(mag_measure.norm() - world_mag.norm()) < threshold_m) && (fabs(dip_angle - world_dip_angle) < threshold_dip))
         //{
-            correction_term = -getVecFromSkew((Ka/2)*((acc_measure.normalized())*(acc_hat.transpose()) - acc_hat*((acc_measure.normalized()).transpose()))
-                                                   + (Km/2)*((mag_measure.normalized())*(acc_hat.transpose()) - mag_hat*((acc_measure.normalized()).transpose())));
+        correction_term = -getVecFromSkew((Ka/2)*((normalized_acc)*(acc_hat.transpose()) - acc_hat*((normalized_acc).transpose()))
+                                                   + (Km/2)*((normalized_mag)*(mag_hat.transpose()) - mag_hat*(normalized_mag.transpose())));
         //}
         // else
         // {
@@ -129,7 +141,7 @@ public:
         //     cout << "\nmeasurements is ignored !!" << endl;
         // }
 
-        //cout << "Correction term : " << correction_term[0] << " " << correction_term[1] << " " << correction_term[2] << endl;
+        cout << "\nCorrection term : " << correction_term[0] << " " << correction_term[1] << " " << correction_term[2] << endl;
 
         A = ang_vel_measured + (Kp+Ki*dt)*correction_term;
         //A = ang_vel_measured + (Kp)*correction_term;
