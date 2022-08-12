@@ -84,7 +84,7 @@ public:
     {
         Matrix4d omega; omega.setZero();
         omega << 0,     -vec.transpose(),
-                vec,    getSkewFromVec(vec);
+                vec,    -getSkewFromVec(vec);
         return omega;
     }
 
@@ -133,13 +133,13 @@ public:
 
     Matrix<double, 6, 1> MeasurementModel()
     {
-        Vector4d qHat(xHat(0), xHat(1), xHat(2), xHat(3));
+        Quaterniond qHat(xHat(0), xHat(1), xHat(2), xHat(3));
         Vector3d bias_aHat(xHat(4), xHat(5), xHat(6));
         Vector3d bias_mHat(xHat(7), xHat(8), xHat(9));
 
         Matrix<double, 6, 1> Model;
-        Model << getRotMatfromQuat(qHat).transpose()*world_gravity + bias_aHat,
-                 getRotMatfromQuat(qHat).transpose()*world_mag + bias_mHat;
+        Model << (qHat.toRotationMatrix()).transpose()*world_gravity + bias_aHat,
+                 (qHat.toRotationMatrix()).transpose()*world_mag + bias_mHat;
 
         return Model;
     }
@@ -192,13 +192,13 @@ public:
 
     void testMeasurements(Vector3d acc_measured, Vector3d mag_measured)
     {
-        Vector4d qHat(xHat(0), xHat(1), xHat(2), xHat(3));
-        dip_angle = acos(((getRotMatfromQuat(qHat)*mag_measured).dot(world_gravity)) / (mag_measured.norm() * world_gravity.norm()));
+        Quaterniond qHat(xHat(0), xHat(1), xHat(2), xHat(3));
+        dip_angle = acos((((qHat.toRotationMatrix())*mag_measured).dot(world_gravity)) / (mag_measured.norm() * world_gravity.norm()));
         //cout << "dip angle : " << dip_angle << endl;
 
         if (fabs(acc_measured.norm() - world_gravity.norm()) < threshold_a)
         {
-            sigma_acc = sigma_acc_const;
+           sigma_acc = sigma_acc_const;
         }
         else 
         {
@@ -208,7 +208,7 @@ public:
 
         if ((fabs(mag_measured.norm() - world_mag.norm()) < threshold_m) && (fabs(dip_angle - world_dip_angle) < threshold_dip))
         {
-            sigma_mag = sigma_mag_const;
+           sigma_mag = sigma_mag_const;
         }
             
         else

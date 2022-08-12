@@ -3,7 +3,6 @@
 #include <Eigen/Dense>
 #include "Mahonyfilter.hpp"
 #include "EKF.hpp"
-#include "EKF2.hpp"
 #include <chrono>
 using namespace std;
 using namespace Eigen;
@@ -170,8 +169,8 @@ int main(int argc, char** argv)
 	cout << "FIrst gyr : " << GyrMeasured[0] << " " << GyrMeasured[1] << " " << GyrMeasured[2] << endl;
 	
 	//to set initial pose as zero
-	MahonyFilter mahony(1, 0.3, 1, 0.5, 1e-3, firstAcc, firstMag, 0.5, 0.1, 5); //gain tuning is needed !!
-	//EKF ekf(1e-3, 0.1, 5e-2, 1e-3, 0.5, 0.05, 0.2, 0.1, 5, firstAcc, firstMag);
+	//MahonyFilter mahony(1, 0.3, 1, 1, 1e-3, firstAcc, firstMag, 0.5, 0.1, 5); //gain tuning is needed !!
+	EKF ekf(1e-3, 0.1, 5e-2, 1e-3, 0.0, 0.0, 0.2, 0.1, 5, firstAcc, firstMag);
 
 //############################################## Loop time check ###############################################################
 	using Framerate = chrono::duration<chrono::steady_clock::rep, std::ratio<1, 1000>>;
@@ -181,9 +180,9 @@ int main(int argc, char** argv)
 
 //#################################################### Measurement  ############################################################
 	// int64_t startTime = XsTime::timeStampNow();
-	// while (XsTime::timeStampNow() - startTime <= 10000)
+	//while (XsTime::timeStampNow() - startTime <= 10000)
 	// int count =  0;
-	// while (count < 100)
+	// while (count < 10)
 	while (1)
 	{
 		if (callback.packetAvailable())
@@ -234,11 +233,11 @@ int main(int argc, char** argv)
 			}
 		}
 //###################################################### Filtering ############################################################
-		mahony.Estimate(GyrMeasured, AccMeasured, MagMeasured);
-		mahony.RosPublishQuaternion();
-		mahony.PrintQuaternion();
-		// ekf.Estimate(GyrMeasured, AccMeasured, MagMeasured);
-		// ekf.RosPublishQuaternion();
+		// mahony.Estimate(GyrMeasured, AccMeasured, MagMeasured);
+		// mahony.RosPublishQuaternion();
+		// mahony.PrintQuaternion();
+		ekf.Estimate(GyrMeasured, AccMeasured, MagMeasured);
+		ekf.RosPublishQuaternion();
 
 		//to make loop Hz constant (1000Hz)
 		while (chrono::steady_clock::now() < next);
