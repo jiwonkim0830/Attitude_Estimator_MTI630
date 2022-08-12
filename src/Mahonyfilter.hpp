@@ -3,7 +3,7 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <ros/ros.h>
-#include <visualization_msgs/Marker.h>
+#include <tf/transform_broadcaster.h>
 
 using namespace std;
 using namespace Eigen;
@@ -18,27 +18,33 @@ private:
     Matrix4d Omega_A; //for correction term
     const Vector3d world_gravity, world_mag;
 
+
+    const double threshold_a, threshold_m, threshold_dip;              //thresholds
+    double dip_angle;
+    const double world_dip_angle;
+
     ros::NodeHandle n;
-	ros::Publisher quat_pub, quat_pub2;
-    visualization_msgs::Marker quat_msgs;
 
 public:
-    MahonyFilter(double Kp_input, double Ki_input, double Ka_input, double Km_input, double dt_input, Vector3d measured_acc, Vector3d measured_mag)
+    MahonyFilter(double Kp_input, double Ki_input, double Ka_input, double Km_input, double dt_input, Vector3d measured_acc, Vector3d measured_mag,
+                 double threshold_a_input, double threshold_m_input, double threshold_dip_input)
     //Kp, Ki, Ka, Km : gain tuning is needed !!
     : Kp(Kp_input), Ki(Ki_input), Ka(Ka_input), Km(Km_input), dt(dt_input), quat_prev(Quaterniond::Identity()), quat_now(Quaterniond::Identity()),
       inv_quat_prev(Quaterniond::Identity()), acc_hat(measured_acc), mag_hat(measured_mag), correction_term(Vector3d::Zero()), A(Vector3d::Zero()), 
-      Omega_A(Matrix4d::Zero()), world_gravity(measured_acc), world_mag(measured_mag)
+      Omega_A(Matrix4d::Zero()), world_gravity(measured_acc), world_mag(measured_mag),
+
+      threshold_a(threshold_a_input), threshold_m(threshold_m_input), threshold_dip(threshold_dip_input),
+      world_dip_angle( acos(measured_acc.dot(measured_mag) / (measured_acc.norm() * measured_mag.norm())) )
     //Set initial pose as (1, 0, 0, 0)
     {
-        quat_pub = n.advertise<visualization_msgs::Marker>("/mahony_quat", 5);
     }
 
     Matrix3d getSkewFromVec(const Vector3d &vec)
     {
         Matrix3d mat; mat.setZero();
-        mat << 0, vec(2), vec(1),
-                vec(2), 0, -vec(0),
-                -vec(1), vec(0), 0;
+        mat << 0, -vec(2), vec(1),
+               vec(2), 0, -vec(0),
+               -vec(1), vec(0), 0;
         return mat;
     }
 
@@ -102,20 +108,31 @@ public:
         return result;
     }
 
-    void Estimate(const Vector3d &ang_vel_measured, const Vector3d &normalized_acc_measure, const Vector3d &normalized_mag_measure)
+    void Estimate(const Vector3d &ang_vel_measured, const Vector3d &acc_measure, const Vector3d &mag_measure)
     {
         cout << fixed; cout.precision(6);
-        inv_quat_prev = quat_prev.inverse();
-        mag_hat = TransformByQuat(inv_quat_prev, world_mag);
-        acc_hat = TransformByQuat(inv_quat_prev, world_gravity);
+
+        mag_hat = TransformByQuat(inv_quat_prev.inverse(), world_mag.normalized());
+        acc_hat = TransformByQuat(inv_quat_prev.inverse(), world_gravity.normalized());
         //cout << "\n" << "Mag hat : " << mag_hat[0] << " " << mag_hat[1] << " " << mag_hat[2] << endl; 
         //cout << "Acc hat : " << acc_hat[0] << " " << acc_hat[1] << " " << acc_hat[2] << endl; 
 
-        correction_term = -getVecFromSkew((Ka/2)*(normalized_acc_measure*(acc_hat.transpose()) - acc_hat*(normalized_acc_measure.transpose()))
-                                                   + (Km/2)*(normalized_mag_measure*(acc_hat.transpose()) - mag_hat*(normalized_acc_measure.transpose())));
+        //dip_angle = acos(((quat_prev.toRotationMatrix()*mag_measure).dot(world_gravity)) / (mag_measure.norm() * world_gravity.norm()));
+        //if (fabs(acc_measure.norm() - world_gravity.norm()) < threshold_a && (fabs(mag_measure.norm() - world_mag.norm()) < threshold_m) && (fabs(dip_angle - world_dip_angle) < threshold_dip))
+        //{
+            correction_term = -getVecFromSkew((Ka/2)*((acc_measure.normalized())*(acc_hat.transpose()) - acc_hat*((acc_measure.normalized()).transpose()))
+                                                   + (Km/2)*((mag_measure.normalized())*(acc_hat.transpose()) - mag_hat*((acc_measure.normalized()).transpose())));
+        //}
+        // else
+        // {
+        //     correction_term << 0.0, 0.0, 0.0;
+        //     cout << "\nmeasurements is ignored !!" << endl;
+        // }
+
         //cout << "Correction term : " << correction_term[0] << " " << correction_term[1] << " " << correction_term[2] << endl;
 
         A = ang_vel_measured + (Kp+Ki*dt)*correction_term;
+        //A = ang_vel_measured + (Kp)*correction_term;
         //cout << "A : " << A[0] << " " << A[1] << " " << A[2] << endl;
 
         Omega_A = First_Order_Approx(A);
@@ -133,27 +150,12 @@ public:
 
     void RosPublishQuaternion()
     {
-        quat_msgs.header.frame_id = "world";
-        quat_msgs.header.stamp = ros::Time();
-        quat_msgs.ns = "my_namespace";
-        quat_msgs.id = 0;
-        quat_msgs.type = visualization_msgs::Marker::CUBE;
-        quat_msgs.action = visualization_msgs::Marker::ADD;
-        quat_msgs.pose.position.x = 0.0;
-        quat_msgs.pose.position.y = 0.0;
-        quat_msgs.pose.position.z = 0.0;
-        quat_msgs.pose.orientation.x = quat_prev.x();
-        quat_msgs.pose.orientation.y = quat_prev.y(); 
-        quat_msgs.pose.orientation.z = quat_prev.z();
-        quat_msgs.pose.orientation.w = quat_prev.w();
-        quat_msgs.scale.x = 1;
-        quat_msgs.scale.y = 1;
-        quat_msgs.scale.z = 1;
-        quat_msgs.color.a = 1.0;
-        quat_msgs.color.r = 0.0;
-        quat_msgs.color.g = 1.0;
-        quat_msgs.color.b = 0.0;
-
-        quat_pub.publish(quat_msgs);
+        static tf::TransformBroadcaster br;
+        tf::Transform transform;
+        transform.setOrigin(tf::Vector3(0.0, 0.0, 0.0));
+        tf::Quaternion q;
+        q.setW(quat_now.w()); q.setX(quat_now.x()); q.setY(quat_now.y()); q.setZ(quat_now.z());
+        transform.setRotation(q);
+        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "mahony_frame"));
     }
 };

@@ -2,6 +2,8 @@
 #include "RosRawDataPublisher.hpp"
 #include <Eigen/Dense>
 #include "Mahonyfilter.hpp"
+#include "EKF.hpp"
+#include "EKF2.hpp"
 #include <chrono>
 using namespace std;
 using namespace Eigen;
@@ -115,12 +117,14 @@ int main(int argc, char** argv)
 	Vector3d GyrMeasured = Vector3d::Zero();
 	Vector3d MagMeasured = Vector3d::Zero();
 //##################################################### for filter initialize ###################################################
-	bool isMahonyAccInitialized = false;
-	bool isMahonyMagInitialized = false;
+	bool isAccInitialized = false;
+	bool isMagInitialized = false;
+	bool isGyrInitialized = false;
 	Vector3d firstAcc;
 	Vector3d firstMag;
+	Vector3d firstGyr;
 
-	while (!isMahonyAccInitialized || !isMahonyMagInitialized)
+	while (!isAccInitialized || !isMagInitialized || !isGyrInitialized)
 	{
 		if (callback.packetAvailable())
 		{
@@ -134,8 +138,8 @@ int main(int argc, char** argv)
 					<< ", AccHR Y:" << accHR[1]
 					<< ", AccHR Z:" << accHR[2] << endl;
 				firstAcc << accHR[0], accHR[1], accHR[2];
-				firstAcc.normalize();
-				isMahonyAccInitialized = true;
+				AccMeasured << accHR[0], accHR[1], accHR[2];
+				isAccInitialized = true;
 			}
 
 			if (packet.containsCalibratedMagneticField())
@@ -145,16 +149,29 @@ int main(int argc, char** argv)
 					<< ", Mag Y:" << mag[1]
 					<< ", Mag Z:" << mag[2] << endl;
 				firstMag << mag[0], mag[1], mag[2];
-				firstMag.normalize();
-				isMahonyMagInitialized = true;
+				MagMeasured << mag[0], mag[1], mag[2];
+				isMagInitialized = true;
+			}
+
+			if (packet.containsRateOfTurnHR())
+			{
+				gyrHR = packet.rateOfTurnHR();
+				cout << "GyrHR X:" << gyrHR[0]
+					<< ", GyrHR Y:" << gyrHR[1]
+					<< ", GyrHR Z:" << gyrHR[2] << endl;
+				GyrMeasured << gyrHR[0], gyrHR[1], gyrHR[2];
+				isGyrInitialized = true;
 			}
 		}
 	}
 	cout << "Filter Initialized !" << endl;
 	cout << "FIrst acc : " << firstAcc[0] << " " << firstAcc[1] << " " << firstAcc[2] << endl;
 	cout << "FIrst mag : " << firstMag[0] << " " << firstMag[1] << " " << firstMag[2] << endl;
+	cout << "FIrst gyr : " << GyrMeasured[0] << " " << GyrMeasured[1] << " " << GyrMeasured[2] << endl;
+	
 	//to set initial pose as zero
-	MahonyFilter mahony(1, 0.3, 1, 0.5, 1e-3, firstAcc, firstMag); //gain tuning is needed !!
+	MahonyFilter mahony(1, 0.3, 1, 0.5, 1e-3, firstAcc, firstMag, 0.5, 0.1, 5); //gain tuning is needed !!
+	//EKF ekf(1e-3, 0.1, 5e-2, 1e-3, 0.5, 0.05, 0.2, 0.1, 5, firstAcc, firstMag);
 
 //############################################## Loop time check ###############################################################
 	using Framerate = chrono::duration<chrono::steady_clock::rep, std::ratio<1, 1000>>;
@@ -164,9 +181,9 @@ int main(int argc, char** argv)
 
 //#################################################### Measurement  ############################################################
 	// int64_t startTime = XsTime::timeStampNow();
-	// while (XsTime::timeStampNow() - startTime <= 5000)
+	// while (XsTime::timeStampNow() - startTime <= 10000)
 	// int count =  0;
-	// while (count < 10)
+	// while (count < 100)
 	while (1)
 	{
 		if (callback.packetAvailable())
@@ -193,7 +210,6 @@ int main(int argc, char** argv)
 					<< ", AccHR Y:" << accHR[1]
 					<< ", AccHR Z:" << accHR[2];
 				AccMeasured(0) = accHR[0]; AccMeasured(1) = accHR[1]; AccMeasured(2) = accHR[2];
-				AccMeasured.normalize();
 			}
 
 			if (packet.containsRateOfTurnHR())
@@ -215,13 +231,14 @@ int main(int argc, char** argv)
 					<< ", Mag Y:" << mag[1]
 					<< ", Mag Z:" << mag[2];
 				MagMeasured(0) = mag[0]; MagMeasured(1) = mag[1]; MagMeasured(2) = mag[2];
-				MagMeasured.normalize();
 			}
 		}
 //###################################################### Filtering ############################################################
 		mahony.Estimate(GyrMeasured, AccMeasured, MagMeasured);
 		mahony.RosPublishQuaternion();
 		mahony.PrintQuaternion();
+		// ekf.Estimate(GyrMeasured, AccMeasured, MagMeasured);
+		// ekf.RosPublishQuaternion();
 
 		//to make loop Hz constant (1000Hz)
 		while (chrono::steady_clock::now() < next);

@@ -10,28 +10,29 @@
 using namespace std;
 using namespace Eigen;
 
-class EKF
+//###################################################### only quaternion in state vesrion #########################################################
+class EKF2
 {
 private:
 
     double dt;
-    double sigma_gyro, sigma_acc, sigma_mag, sigma_acc_w, sigma_mag_w; //gains
+    double sigma_gyro, sigma_acc, sigma_mag;                           //gains
     const double sigma_acc_const, sigma_mag_const;
     const double threshold_a, threshold_m, threshold_dip;              //thresholds
     double dip_angle;
     const double world_dip_angle;
 
     double scalar_part; Vector3d vector_part;                          //of quaternion (for Xi matrix)
-    Vector4d quat;                                                     //for normalize
+
     
-    Matrix<double, 10, 1> xHat, x;                                     //predicted, corrected state (quaternion, acc_bias, mag_bias)
+    Matrix<double, 4, 1> xHat, x;                                     //predicted, corrected state (quaternion)
     Matrix<double, 6, 1> z;                                            //mesurements
 
-    Matrix<double, 10, 10> Phi, Q;                                     //Motion model matrix, Motion model covariance matrix
-    Matrix<double, 10, 10> PHat, P;                                    //predicted, corrected error covarivance matrix
+    Matrix4d Phi, Q;                                     //Motion model matrix, Motion model covariance matrix
+    Matrix4d PHat, P;                                    //predicted, corrected error covarivance matrix
     Matrix<double, 4, 3> Xi;                                           //to mapping gyro error to motion error
-    Matrix<double, 6, 10> F;                                           //Linearized measurement model
-    Matrix<double, 10, 6> KalmanGain;                                  //Kalman Gain
+    Matrix<double, 6, 4> F;                                            //Linearized measurement model
+    Matrix<double, 4, 6> KalmanGain;                                   //Kalman Gain
     Matrix<double, 6, 6> R;                                            //Measurement model covariance matrix
 
     Vector3d world_gravity, world_mag;
@@ -40,11 +41,11 @@ private:
 
 public:
 
-    EKF(double dt_input, double sigma_gyro_input, double sigma_acc_input, double sigma_mag_input, double sigma_acc_w_input, double sigma_mag_w_input, 
+    EKF2(double dt_input, double sigma_gyro_input, double sigma_acc_input, double sigma_mag_input,
     double threshold_a_input, double threshold_m_input, double threshold_dip_input, Vector3d first_acc, Vector3d first_mag)
     : dt(dt_input), 
-      sigma_gyro(sigma_gyro_input), sigma_acc_const(sigma_acc_input), sigma_mag_const(sigma_mag_input), sigma_acc_w(sigma_acc_w_input), sigma_mag_w(sigma_mag_w_input),
-      scalar_part(1), vector_part(Vector3d::Zero()), quat(1,0,0,0),
+      sigma_gyro(sigma_gyro_input), sigma_acc_const(sigma_acc_input), sigma_mag_const(sigma_mag_input),
+      scalar_part(1), vector_part(Vector3d::Zero()), 
       world_dip_angle( acos(first_acc.dot(first_mag) / (first_acc.norm() * first_mag.norm())) ),
       world_gravity(first_acc), world_mag(first_mag),
       threshold_a(threshold_a_input), threshold_m(threshold_m_input), threshold_dip(threshold_dip_input)
@@ -57,9 +58,7 @@ public:
 
     void InitializeFilter(Vector3d &acc, Vector3d &mag)
     {
-        x << 1, 0, 0, 0,  //quaternion
-             0, 0, 0,     //acc bias
-             0, 0, 0;     //mag bias
+        x << 1, 0, 0, 0;  //quaternion
 
         z << acc,
              mag;
@@ -74,17 +73,19 @@ public:
     Matrix3d getSkewFromVec(const Vector3d &vec)
     {
         Matrix3d mat; mat.setZero();
-        mat << 0, -vec(2), vec(1),
-               vec(2), 0, -vec(0),
-               -vec(1), vec(0), 0;
+        mat << 0.0, -vec(2), vec(1),
+               vec(2), 0.0, -vec(0),
+               -vec(1), vec(0), 0.0;
         return mat;
     }
 
     Matrix4d getOmegaFromVec(const Vector3d &vec)
     {
+        cout << fixed; cout.precision(6);
         Matrix4d omega; omega.setZero();
-        omega << 0,     -vec.transpose(),
-                vec,    getSkewFromVec(vec);
+        omega << 0.0,   -vec.transpose(),
+                 vec,   getSkewFromVec(vec);
+        //cout << "\nomega : \n" << omega << endl;
         return omega;
     }
 
@@ -107,9 +108,7 @@ public:
     
     void getPhi(const Vector3d &ang_vel)
     {
-        Phi << firstOrderApprox(ang_vel),    Matrix<double, 4, 3>::Zero(),     Matrix<double, 4, 3>::Zero(),
-               Matrix<double, 3, 4>::Zero(), Matrix3d::Identity(),             Matrix3d::Zero(),
-               Matrix<double, 3, 4>::Zero(), Matrix3d::Zero(),                 Matrix3d::Identity();
+        Phi << firstOrderApprox(ang_vel);
         // cout << "\nfirstOrderApprox : \n" << firstOrderApprox(ang_vel) << endl;
         //cout << "\nPhi : \n" << Phi << endl;
     }
@@ -119,13 +118,12 @@ public:
         scalar_part = x(0); vector_part << x(1), x(2), x(3);
         Xi << getSkewFromVec(vector_part) + scalar_part * Matrix3d::Identity(),
               -vector_part.transpose();
-
-        Q << pow((dt*0.5), 2)*Xi*getCovarianceMat(sigma_gyro)*(Xi.transpose()), Matrix<double, 4, 3>::Zero(),     Matrix<double, 4, 3>::Zero(),
-             Matrix<double, 3, 4>::Zero(),                                      dt*getCovarianceMat(sigma_acc_w), Matrix3d::Zero(),
-             Matrix<double, 3, 4>::Zero(),                                      Matrix3d::Zero(),                 dt*getCovarianceMat(sigma_mag_w);
+        //cout << "\nXi : \n" << Xi << endl;
+        Q << pow((dt*0.5), 2)*Xi*getCovarianceMat(sigma_gyro)*(Xi.transpose());
+        //cout << "\nQ : \n" << Q << endl;
     }
 
-    void getMeasurements(Vector3d acc_measured, Vector3d mag_measured)
+    void getMeasurements(const Vector3d &acc_measured, const Vector3d &mag_measured)
     {
         z << acc_measured,
              mag_measured;
@@ -133,13 +131,11 @@ public:
 
     Matrix<double, 6, 1> MeasurementModel()
     {
-        Vector4d qHat(xHat(0), xHat(1), xHat(2), xHat(3));
-        Vector3d bias_aHat(xHat(4), xHat(5), xHat(6));
-        Vector3d bias_mHat(xHat(7), xHat(8), xHat(9));
-
         Matrix<double, 6, 1> Model;
-        Model << getRotMatfromQuat(qHat).transpose()*world_gravity + bias_aHat,
-                 getRotMatfromQuat(qHat).transpose()*world_mag + bias_mHat;
+        Model << (getRotMatfromQuat(xHat).transpose())*world_gravity,
+                 (getRotMatfromQuat(xHat).transpose())*world_mag;
+        // Model << (getRotMatfromQuat(xHat))*world_gravity,
+        //          (getRotMatfromQuat(xHat))*world_mag;
 
         return Model;
     }
@@ -147,53 +143,46 @@ public:
     void getF() //Measurement model linearization - Jacobian is calculated from matlab
     {
         // rotMat = quaternion.toRotationMatrix();
-        // MeasurementModel << (rotMat.transpose()*world_gravity + acc_bias),
-        //                     (rotMat.transpose()*world_mag + mag_bias);
+        // MeasurementModel << (rotMat.transpose()*world_gravity ),
+        //                     (rotMat.transpose()*world_mag y);
         
-        F = Matrix<double, 6, 10>::Zero();
+        F = Matrix<double, 6, 4>::Zero();
 
         F(0,0) = 4*world_gravity(0)*xHat(0) + 2*world_gravity(1)*xHat(3) - 2*world_gravity(2)*xHat(2);  //4*g0*q0 + 2*g1*q3 - 2*g2*q2
         F(0,1) = 4*world_gravity(0)*xHat(1) + 2*world_gravity(1)*xHat(2) + 2*world_gravity(2)*xHat(3);  //4*g0*q1 + 2*g1*q2 + 2*g2*q3
         F(0,2) = 2*world_gravity(1)*xHat(1) - 2*world_gravity(2)*xHat(0);                               //2*g1*q1 - 2*g2*q0
         F(0,3) = 2*world_gravity(1)*xHat(0) + 2*world_gravity(2)*xHat(1);                               //2*g1*q0 + 2*g2*q1
-        F(0,4) = 1;  F(0,5) = 0;  F(0,6) = 0;  F(0,7) = 0;  F(0,8) = 0;  F(0,9) = 0;                    //1 0 0 0 0 0
 
         F(1,0) = 4*world_gravity(1)*xHat(0) - 2*world_gravity(0)*xHat(3) + 2*world_gravity(2)*xHat(1);  //4*g1*q0 - 2*g0*q3 + 2*g2*q1
         F(1,1) = 2*world_gravity(0)*xHat(2) + 2*world_gravity(2)*xHat(0);                               //2*g0*q2 + 2*g2*q0
         F(1,2) = 2*world_gravity(0)*xHat(1) + 4*world_gravity(1)*xHat(2) + 2*world_gravity(2)*xHat(3);  //2*g0*q1 + 4*g1*q2 + 2*g2*q3
         F(1,3) = 2*world_gravity(2)*xHat(2) - 2*world_gravity(0)*xHat(0);                               //2*g2*q2 - 2*g0*q0
-        F(1,4) = 0;  F(1,5) = 1;  F(1,6) = 0;  F(1,7) = 0;  F(1,8) = 0;  F(1,9) = 0;                    //0 1 0 0 0 0
 
         F(2,0) = 2*world_gravity(0)*xHat(2) - 2*world_gravity(1)*xHat(1) + 4*world_gravity(2)*xHat(0);  //2*g0*q2 - 2*g1*q1 + 4*g2*q0
         F(2,1) = 2*world_gravity(0)*xHat(3) - 2*world_gravity(1)*xHat(0);                               //2*g0*q3 - 2*g1*q0
         F(2,2) = 2*world_gravity(0)*xHat(0) + 2*world_gravity(1)*xHat(3);                               //2*g0*q0 + 2*g1*q3
         F(2,3) = 2*world_gravity(0)*xHat(1) + 2*world_gravity(1)*xHat(2) + 4*world_gravity(2)*xHat(3);  //2*g0*q1 + 2*g1*q2 + 4*g2*q3
-        F(2,4) = 0;  F(2,5) = 0;  F(2,6) = 1;  F(2,7) = 0;  F(2,8) = 0;  F(2,9) = 0;                    //0 0 1 0 0 0
 
         F(3,0) = 4*world_mag(0)*xHat(0) + 2*world_mag(1)*xHat(3) - 2*world_mag(2)*xHat(2);              //4*h0*q0 + 2*h1*q3 - 2*h2*q2
         F(3,1) = 4*world_mag(0)*xHat(1) + 2*world_mag(1)*xHat(2) + 2*world_mag(2)*xHat(3);              //4*h0*q1 + 2*h1*q2 + 2*h2*q3
         F(3,2) = 2*world_mag(1)*xHat(1) - 2*world_mag(2)*xHat(0);                                       //2*h1*q1 - 2*h2*q0
         F(3,3) = 2*world_mag(1)*xHat(0) + 2*world_mag(2)*xHat(1);                                       //2*h1*q0 + 2*h2*q1
-        F(3,4) = 0;  F(3,5) = 0;  F(3,6) = 0;  F(3,7) = 1;  F(3,8) = 0;  F(3,9) = 0;                    //0 0 0 1 0 0
 
         F(4,0) = 4*world_mag(1)*xHat(0) - 2*world_mag(0)*xHat(3) + 2*world_mag(2)*xHat(1);              //4*h1*q0 - 2*h0*q3 + 2*h2*q1
         F(4,1) = 2*world_mag(0)*xHat(2) + 2*world_mag(2)*xHat(0);                                       //2*h0*q2 + 2*h2*q0
         F(4,2) = 2*world_mag(0)*xHat(1) + 4*world_mag(1)*xHat(2) + 2*world_mag(2)*xHat(3);              //2*h0*q1 + 4*h1*q2 + 2*h2*q3
         F(4,3) = 2*world_mag(2)*xHat(2) - 2*world_mag(0)*xHat(0);                                       //2*h2*q2 - 2*h0*q0
-        F(4,4) = 0;  F(4,5) = 0;  F(4,6) = 0;  F(4,7) = 0;  F(4,8) = 1;  F(4,9) = 0;                    //0 0 0 0 1 0
 
         F(5,0) = 2*world_mag(0)*xHat(2) - 2*world_mag(1)*xHat(1) + 4*world_mag(2)*xHat(0);              //2*h0*q2 - 2*h1*q1 + 4*h2*q0
         F(5,1) = 2*world_mag(0)*xHat(3) - 2*world_mag(1)*xHat(0);                                       //2*h0*q3 - 2*h1*q0
         F(5,2) = 2*world_mag(0)*xHat(0) + 2*world_mag(1)*xHat(3);                                       //2*g0*q0 + 2*g1*q3
         F(5,3) = 2*world_mag(0)*xHat(1) + 2*world_mag(1)*xHat(2) + 4*world_mag(2)*xHat(3);              //2*h0*q1 + 2*h1*q2 + 4*h2*q3
-        F(5,4) = 0;  F(5,5) = 0;  F(5,6) = 0;  F(5,7) = 0;  F(5,8) = 0;  F(5,9) = 1;                    //0 0 1 0 0 0
         //cout << "\nF : \n" << F << endl; 
     }
 
     void testMeasurements(Vector3d acc_measured, Vector3d mag_measured)
     {
-        Vector4d qHat(xHat(0), xHat(1), xHat(2), xHat(3));
-        dip_angle = acos(((getRotMatfromQuat(qHat)*mag_measured).dot(world_gravity)) / (mag_measured.norm() * world_gravity.norm()));
+        dip_angle = acos(((getRotMatfromQuat(xHat)*mag_measured).dot(world_gravity)) / (mag_measured.norm() * world_gravity.norm()));
         //cout << "dip angle : " << dip_angle << endl;
 
         if (fabs(acc_measured.norm() - world_gravity.norm()) < threshold_a)
@@ -202,8 +191,8 @@ public:
         }
         else 
         {
-            sigma_acc = sqrt(DBL_MAX);
-            cout << "\nacc is ignored";
+            sigma_acc = 10000000;
+            cout << "\nacc is ignored" << endl;
         }
 
         if ((fabs(mag_measured.norm() - world_mag.norm()) < threshold_m) && (fabs(dip_angle - world_dip_angle) < threshold_dip))
@@ -213,8 +202,8 @@ public:
             
         else
         {
-            sigma_mag = sqrt(DBL_MAX);
-            cout << "\nmag is ignored";
+            sigma_mag = 10000000;
+            cout << "\nmag is ignored" << endl;
         }
     }
 
@@ -227,31 +216,27 @@ public:
 
     void Estimate(const Vector3d &ang_vel_measured, const Vector3d &acc_measure, const Vector3d &mag_measure)
     {
-        // cout << fixed; cout.precision(6);
-        // cout << "\nang_vel_measured : \n" << ang_vel_measured;
+        cout << fixed; cout.precision(6);
+        //cout << "\nang_vel_measured : \n" << ang_vel_measured;
         getPhi(ang_vel_measured);  getQ();
 
         xHat = Phi*x;
         PHat = Phi*P*(Phi.transpose())+Q;
-        quat << xHat(0), xHat(1), xHat(2), xHat(3); quat.normalize(); 
-        xHat(0) = quat(0); xHat(1) = quat(1); xHat(2) = quat(2); xHat(3) = quat(3);
-        //cout << "\nPhi : \n" << Phi << endl;
+        xHat.normalize();
+        cout << "\nPhi : \n" << Phi << endl;
         //cout << "\nquaternionHat : "<< xHat(0) << " " << xHat(1) << " " << xHat(2) << " " << xHat(3) << endl;
 
         getMeasurements(acc_measure, mag_measure);  testMeasurements(acc_measure, mag_measure);  getF();  getR();
-        //cout << "R : \n" << R << endl; 
+        cout << "R : \n" << R << endl; 
 
-        KalmanGain = PHat*F.transpose()*((F*PHat*F.transpose()+R).inverse());
-        //cout << "Kalman Gain : \n" << KalmanGain << endl; 
+        KalmanGain = PHat*(F.transpose())*((F*PHat*(F.transpose())+R).inverse());
+        cout << "Kalman Gain : \n" << KalmanGain << endl; 
 
         x = xHat + KalmanGain*(z - MeasurementModel());
         P = PHat - KalmanGain*F*PHat;
-        quat << x(0), x(1), x(2), x(3); quat.normalize(); 
-        x(0) = quat(0); x(1) = quat(1); x(2) = quat(2); x(3) = quat(3);
+        x.normalize();
         
         cout << "\nquaternion : "<< x(0) << " " << x(1) << " " << x(2) << " " << x(3) << endl;
-        cout << "acc bias : " << x(4) << " " << x(5) << " " << x(6) << endl;
-        cout << "mag bias : " << x(7) << " " << x(8) << " " << x(9) << endl;
         
         if (isnan(x(0)))
         {
@@ -273,7 +258,7 @@ public:
         tf::Quaternion q;
         q.setW(x(0)); q.setX(x(1)); q.setY(x(2)); q.setZ(x(3));
         transform.setRotation(q);
-        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "ekf_frame"));
+        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "ekf_frame2"));
     }
 
 };
