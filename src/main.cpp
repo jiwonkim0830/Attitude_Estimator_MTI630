@@ -168,9 +168,9 @@ int main(int argc, char** argv)
 	cout << "FIrst mag : " << firstMag[0] << " " << firstMag[1] << " " << firstMag[2] << endl;
 	cout << "FIrst gyr : " << GyrMeasured[0] << " " << GyrMeasured[1] << " " << GyrMeasured[2] << endl;
 	
-	//to set initial pose as zero
+//############################################## Choose the filter ############################################################
 	//MahonyFilter mahony(1, 0.3, 1, 1, 1e-3, firstAcc, firstMag, 0.5, 0.1, 5); //gain tuning is needed !!
-	EKF ekf(1e-3, 0.1, 5e-2, 1e-3, 0.0, 0.0, 0.2, 0.1, 0.17, firstAcc, firstMag);
+	EKF ekf(1e-3, 1e-2, 5e-2, 1e-2, 0.0, 0.0, 0.2, 0.1, 0.17, firstAcc, firstMag); //gain tuning is needed !!
 
 //############################################## Loop time check ###############################################################
 	using Framerate = chrono::duration<chrono::steady_clock::rep, std::ratio<1, 1000>>;
