@@ -8,6 +8,7 @@ Attitude estimator using MTI630 (Mahony filter, EKF)
 2. cd [sdk dir]/examples/xda_cpp
 3. clone this repository
 4. edit cmake file as you want
+5. choose the filter on main.cpp
 
 
 ## Reference
