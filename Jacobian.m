@@ -9,9 +9,9 @@ syms q0 q1 q2 q3 q4 b_a1 b_a2 b_a3 b_m1 b_m2 b_m3 g0 g1 g2 h0 h1 h2 g
 
 %% Function
 
-R_from_n_to_b = [q1^2 - q2^2 - q3^2 + q0^2,   2 * (q1 * q2 + q3 * q0),      2 * (q1 * q3 - q2 * q0); ...
-                 2 * (q1 * q2 - q3 * q0),     -q1^2 + q2^2 - q3^2 + q0^2,   2 * (q2 * q3 + q0 * q1); ...
-                 2 * (q1 * q3 + q2 * q0),     2 * (q2 * q3 - q0 * q1),      -q1^2 - q2^2 + q3^2 + q0^2];
+R_from_n_to_b = [q1^2 - q2^2 - q3^2 + q4^2,   2 * (q1 * q2 + q3 * q4),      2 * (q1 * q3 - q2 * q4); ...
+                 2 * (q1 * q2 - q3 * q4),     -q1^2 + q2^2 - q3^2 + q4^2,   2 * (q2 * q3 + q4 * q1); ...
+                 2 * (q1 * q3 + q2 * q4),     2 * (q2 * q3 - q4 * q1),      -q1^2 - q2^2 + q3^2 + q4^2];
 g = [g0; g1; g2];
 h = [h0; h1; h2];
 b_a = [b_a1; b_a2; b_a3];
@@ -28,7 +28,7 @@ F6 = measurement_model(6);
 
 %% Jacobian
 
-x = [q0 q1 q2 q3 b_a1 b_a2 b_a3 b_m1 b_m2 b_m3];
+x = [q1 q2 q3 q4 b_a1 b_a2 b_a3 b_m1 b_m2 b_m3];
 Jacob = jacobian(measurement_model, x)
 
 J0 = Jacob(6,1)
