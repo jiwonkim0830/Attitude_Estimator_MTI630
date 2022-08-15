@@ -35,6 +35,7 @@ private:
     Matrix<double, 6, 6> R;                                            //Measurement model covariance matrix
 
     Vector3d world_gravity, world_mag;
+    double g0, g1, g2, h0, h1, h2, q1, q2, q3, q4;
 
     ros::NodeHandle n;
 
@@ -44,7 +45,7 @@ public:
     double threshold_a_input, double threshold_m_input, double threshold_dip_input, Vector3d first_acc, Vector3d first_mag)
     : dt(dt_input), 
       sigma_gyro(sigma_gyro_input), sigma_acc_const(sigma_acc_input), sigma_mag_const(sigma_mag_input), sigma_acc_w(sigma_acc_w_input), sigma_mag_w(sigma_mag_w_input),
-      scalar_part(1), vector_part(Vector3d::Zero()), quat(1,0,0,0),
+      scalar_part(1), vector_part(Vector3d::Zero()), quat(0,0,0,1),
       world_dip_angle( acos(first_acc.dot(first_mag) / (first_acc.norm() * first_mag.norm())) ),
       world_gravity(first_acc), world_mag(first_mag),
       threshold_a(threshold_a_input), threshold_m(threshold_m_input), threshold_dip(threshold_dip_input)
@@ -57,7 +58,7 @@ public:
 
     void InitializeFilter(Vector3d &acc, Vector3d &mag)
     {
-        x << 1, 0, 0, 0,  //quaternion
+        x << 0, 0, 0, 1,  //quaternion
              0, 0, 0,     //acc bias
              0, 0, 0;     //mag bias
 
@@ -83,8 +84,10 @@ public:
     Matrix4d getOmegaFromVec(const Vector3d &vec)
     {
         Matrix4d omega; omega.setZero();
-        omega << 0,     -vec.transpose(),
-                vec,    -getSkewFromVec(vec);
+        omega << -getSkewFromVec(vec), vec,
+                 -vec.transpose(),     0;
+        //omega << 0,     -vec.transpose(),
+        //       vec,    -getSkewFromVec(vec);
         return omega;
     }
 
@@ -116,7 +119,7 @@ public:
 
     void getQ()
     {
-        scalar_part = x(0); vector_part << x(1), x(2), x(3);
+        scalar_part = x(3); vector_part << x(0), x(1), x(2);
         Xi << getSkewFromVec(vector_part) + scalar_part * Matrix3d::Identity(),
               -vector_part.transpose();
 
@@ -125,22 +128,23 @@ public:
              Matrix<double, 3, 4>::Zero(),                                      Matrix3d::Zero(),                 dt*getCovarianceMat(sigma_mag_w);
     }
 
-    void getMeasurements(Vector3d acc_measured, Vector3d mag_measured)
+    void getMeasurements(const Vector3d &acc_measured, const Vector3d &mag_measured)
     {
         z << acc_measured,
              mag_measured;
+        cout << "\nmeasurements : \n" << z << endl;
     }
 
     Matrix<double, 6, 1> MeasurementModel()
     {
-        Quaterniond qHat(xHat(0), xHat(1), xHat(2), xHat(3));
+        Quaterniond qHat(xHat(3), xHat(0), xHat(1), xHat(2));
         Vector3d bias_aHat(xHat(4), xHat(5), xHat(6));
         Vector3d bias_mHat(xHat(7), xHat(8), xHat(9));
 
         Matrix<double, 6, 1> Model;
-        Model << (qHat.toRotationMatrix()).transpose()*world_gravity + bias_aHat,
-                 (qHat.toRotationMatrix()).transpose()*world_mag + bias_mHat;
-
+        Model << ((qHat.toRotationMatrix()).transpose())*world_gravity + bias_aHat,
+                 ((qHat.toRotationMatrix()).transpose())*world_mag + bias_mHat;
+        cout << "\nmeasurement model : \n" << Model << endl;
         return Model;
     }
 
@@ -151,48 +155,51 @@ public:
         //                     (rotMat.transpose()*world_mag + mag_bias);
         
         F = Matrix<double, 6, 10>::Zero();
+        g0 = world_gravity(0); g1 = world_gravity(1); g2 = world_gravity(2);
+        h0 = world_mag(0); h1 = world_mag(1); h2 = world_mag(2); 
+        q1 = xHat(0); q2 = xHat(1); q3 = xHat(2); q4 = xHat(3);
 
-        F(0,0) = 2*world_gravity(0)*xHat(0) + 2*world_gravity(1)*xHat(3) - 2*world_gravity(2)*xHat(2);  //2*g0*q0 + 2*g1*q3 - 2*g2*q2
-        F(0,1) = 2*world_gravity(0)*xHat(1) + 2*world_gravity(1)*xHat(2) + 2*world_gravity(2)*xHat(3);  //2*g0*q1 + 2*g1*q2 + 2*g2*q3
-        F(0,2) = 2*world_gravity(1)*xHat(1) - 2*world_gravity(0)*xHat(2) - 2*world_gravity(2)*xHat(0);  //2*g1*q1 - 2*g0*q2 - 2*g2*q0
-        F(0,3) = 2*world_gravity(1)*xHat(0) - 2*world_gravity(0)*xHat(3) + 2*world_gravity(2)*xHat(1);  //2*g1*q0 - 2*g0*q3 + 2*g2*q1
-        F(0,4) = 1;  F(0,5) = 0;  F(0,6) = 0;  F(0,7) = 0;  F(0,8) = 0;  F(0,9) = 0;                    //1 0 0 0 0 0
+        F(0,0) = 2*g0*q1 + 2*g1*q2 + 2*g2*q3;
+        F(0,1) = 2*g1*q1 - 2*g0*q2 - 2*g2*q4;
+        F(0,2) = 2*g2*q1 - 2*g0*q3 + 2*g1*q4;
+        F(0,3) = 2*g0*q4 + 2*g1*q3 - 2*g2*q2;
+        F(0,4) = 1;  F(0,5) = 0;  F(0,6) = 0;  F(0,7) = 0;  F(0,8) = 0;  F(0,9) = 0;
 
-        F(1,0) = 2*world_gravity(1)*xHat(0) - 2*world_gravity(0)*xHat(3) + 2*world_gravity(2)*xHat(1);  //2*g1*q0 - 2*g0*q3 + 2*g2*q1
-        F(1,1) = 2*world_gravity(0)*xHat(2) - 2*world_gravity(1)*xHat(1) + 2*world_gravity(2)*xHat(0);  //2*g0*q2 - 2*g1*q1 + 2*g2*q0
-        F(1,2) = 2*world_gravity(0)*xHat(1) + 2*world_gravity(1)*xHat(2) + 2*world_gravity(2)*xHat(3);  //2*g0*q1 + 2*g1*q2 + 2*g2*q3
-        F(1,3) = 2*world_gravity(2)*xHat(2) - 2*world_gravity(1)*xHat(3) - 2*world_gravity(0)*xHat(0);  //2*g2*q2 - 2*g1*q3 - 2*g0*q0
-        F(1,4) = 0;  F(1,5) = 1;  F(1,6) = 0;  F(1,7) = 0;  F(1,8) = 0;  F(1,9) = 0;                    //0 1 0 0 0 0
+        F(1,0) = 2*g0*q2 - 2*g1*q1 + 2*g2*q4;
+        F(1,1) = 2*g0*q1 + 2*g1*q2 + 2*g2*q3;
+        F(1,2) = 2*g2*q2 - 2*g1*q3 - 2*g0*q4;
+        F(1,3) = 2*g2*q1 - 2*g0*q3 + 2*g1*q4;
+        F(1,4) = 0;  F(1,5) = 1;  F(1,6) = 0;  F(1,7) = 0;  F(1,8) = 0;  F(1,9) = 0;                    
 
-        F(2,0) = 2*world_gravity(0)*xHat(2) - 2*world_gravity(1)*xHat(1) + 2*world_gravity(2)*xHat(0);  //2*g0*q2 - 2*g1*q1 + 2*g2*q0
-        F(2,1) = 2*world_gravity(0)*xHat(3) - 2*world_gravity(1)*xHat(0) - 2*world_gravity(2)*xHat(1);  //2*g0*q3 - 2*g1*q0 - 2*g2*q1
-        F(2,2) = 2*world_gravity(0)*xHat(0) + 2*world_gravity(1)*xHat(3) - 2*world_gravity(2)*xHat(2);  //2*g0*q0 + 2*g1*q3 - 2*g2*q2
-        F(2,3) = 2*world_gravity(0)*xHat(1) + 2*world_gravity(1)*xHat(2) + 2*world_gravity(2)*xHat(3);  //2*g0*q1 + 2*g1*q2 + 2*g2*q3
-        F(2,4) = 0;  F(2,5) = 0;  F(2,6) = 1;  F(2,7) = 0;  F(2,8) = 0;  F(2,9) = 0;                    //0 0 1 0 0 0
+        F(2,0) = 2*g0*q3 - 2*g2*q1 - 2*g1*q4;
+        F(2,1) = 2*g0*q4 + 2*g1*q3 - 2*g2*q2;
+        F(2,2) = 2*g0*q1 + 2*g1*q2 + 2*g2*q3;
+        F(2,3) = 2*g0*q2 - 2*g1*q1 + 2*g2*q4;
+        F(2,4) = 0;  F(2,5) = 0;  F(2,6) = 1;  F(2,7) = 0;  F(2,8) = 0;  F(2,9) = 0;                    
 
-        F(3,0) = 2*world_mag(0)*xHat(0) + 2*world_mag(1)*xHat(3) - 2*world_mag(2)*xHat(2);              //2*h0*q0 + 2*h1*q3 - 2*h2*q2
-        F(3,1) = 2*world_mag(0)*xHat(1) + 2*world_mag(1)*xHat(2) + 2*world_mag(2)*xHat(3);              //2*h0*q1 + 2*h1*q2 + 2*h2*q3
-        F(3,2) = 2*world_mag(1)*xHat(1) - 2*world_mag(0)*xHat(2) - 2*world_mag(2)*xHat(0);              //2*h1*q1 - 2*h0*q2 - 2*h2*q0
-        F(3,3) = 2*world_mag(1)*xHat(0) - 2*world_mag(0)*xHat(3) + 2*world_mag(2)*xHat(1);              //2*h1*q0 - 2*h0*q3 + 2*h2*q1
-        F(3,4) = 0;  F(3,5) = 0;  F(3,6) = 0;  F(3,7) = 1;  F(3,8) = 0;  F(3,9) = 0;                    //0 0 0 1 0 0
+        F(3,0) = 2*h0*q1 + 2*h1*q2 + 2*h2*q3;
+        F(3,1) = 2*h1*q1 - 2*h0*q2 - 2*h2*q4;
+        F(3,2) = 2*h2*q1 - 2*h0*q3 + 2*h1*q4;
+        F(3,3) = 2*h0*q4 + 2*h1*q3 - 2*h2*q2;
+        F(3,4) = 0;  F(3,5) = 0;  F(3,6) = 0;  F(3,7) = 1;  F(3,8) = 0;  F(3,9) = 0;                   
 
-        F(4,0) = 2*world_mag(1)*xHat(0) - 2*world_mag(0)*xHat(3) + 2*world_mag(2)*xHat(1);              //2*h1*q0 - 2*h0*q3 + 2*h2*q1
-        F(4,1) = 2*world_mag(0)*xHat(2) - 2*world_mag(1)*xHat(1) + 2*world_mag(2)*xHat(0);              //2*h0*q2 - 2*h1*q1 + 2*h2*q0
-        F(4,2) = 2*world_mag(0)*xHat(1) + 2*world_mag(1)*xHat(2) + 2*world_mag(2)*xHat(3);              //2*h0*q1 + 2*h1*q2 + 2*h2*q3
-        F(4,3) = 2*world_mag(2)*xHat(2) - 2*world_mag(1)*xHat(3) - 2*world_mag(0)*xHat(0);              //2*h2*q2 - 2*h1*q3 - 2*h0*q0
+        F(4,0) = 2*h0*q2 - 2*h1*q1 + 2*h2*q4;
+        F(4,1) = 2*h0*q1 + 2*h1*q2 + 2*h2*q3;
+        F(4,2) = 2*h2*q2 - 2*h1*q3 - 2*h0*q4;
+        F(4,3) = 2*h2*q1 - 2*h0*q3 + 2*h1*q4;
         F(4,4) = 0;  F(4,5) = 0;  F(4,6) = 0;  F(4,7) = 0;  F(4,8) = 1;  F(4,9) = 0;                    //0 0 0 0 1 0
 
-        F(5,0) = 2*world_mag(0)*xHat(2) - 2*world_mag(1)*xHat(1) + 2*world_mag(2)*xHat(0);              //2*h0*q2 - 2*h1*q1 + 2*h2*q0
-        F(5,1) = 2*world_mag(0)*xHat(3) - 2*world_mag(1)*xHat(0) - 2*world_mag(2)*xHat(1);              //2*h0*q3 - 2*h1*q0 - 2*h2*q1
-        F(5,2) = 2*world_mag(0)*xHat(0) + 2*world_mag(1)*xHat(3) - 2*world_mag(2)*xHat(2);              //2*h0*q0 + 2*h1*q3 - 2*h2*q2
-        F(5,3) = 2*world_mag(0)*xHat(1) + 2*world_mag(1)*xHat(2) + 2*world_mag(2)*xHat(3);              //2*h0*q1 + 2*h1*q2 + 2*h2*q3
+        F(5,0) = 2*h0*q3 - 2*h2*q1 - 2*h1*q4;
+        F(5,1) = 2*h0*q4 + 2*h1*q3 - 2*h2*q2;
+        F(5,2) = 2*h0*q1 + 2*h1*q2 + 2*h2*q3;
+        F(5,3) = 2*h0*q2 - 2*h1*q1 + 2*h2*q4;
         F(5,4) = 0;  F(5,5) = 0;  F(5,6) = 0;  F(5,7) = 0;  F(5,8) = 0;  F(5,9) = 1;                    //0 0 1 0 0 0
         //cout << "\nF : \n" << F << endl; 
     }
 
-    void testMeasurements(Vector3d acc_measured, Vector3d mag_measured)
+    void testMeasurements(const Vector3d &acc_measured, const Vector3d &mag_measured)
     {
-        Quaterniond qHat(xHat(0), xHat(1), xHat(2), xHat(3));
+        Quaterniond qHat(xHat(3), xHat(1), xHat(2), xHat(0));
         dip_angle = acos((((qHat.toRotationMatrix())*mag_measured).dot(world_gravity)) / (mag_measured.norm() * world_gravity.norm()));
         //cout << "dip angle : " << dip_angle << endl;
 
@@ -202,7 +209,8 @@ public:
         }
         else 
         {
-            sigma_acc = sqrt(DBL_MAX);
+            //sigma_acc = sqrt(DBL_MAX);
+            sigma_acc = 1e10;
             cout << "\nacc is ignored";
         }
 
@@ -213,7 +221,8 @@ public:
             
         else
         {
-            sigma_mag = sqrt(DBL_MAX);
+            //sigma_mag = sqrt(DBL_MAX);
+            sigma_mag = 1e10;
             cout << "\nmag is ignored";
         }
     }
@@ -225,11 +234,11 @@ public:
     }
 
 
-    void Estimate(const Vector3d &ang_vel_measured, const Vector3d &acc_measure, const Vector3d &mag_measure)
+    void Estimate(const Vector3d &ang_vel_measure, const Vector3d &acc_measure, const Vector3d &mag_measure)
     {
         // cout << fixed; cout.precision(6);
         // cout << "\nang_vel_measured : \n" << ang_vel_measured;
-        getPhi(ang_vel_measured);  getQ();
+        getPhi(ang_vel_measure);  getQ();
 
         xHat = Phi*x;
         PHat = Phi*P*(Phi.transpose())+Q;
@@ -249,7 +258,7 @@ public:
         quat << x(0), x(1), x(2), x(3); quat.normalize(); 
         x(0) = quat(0); x(1) = quat(1); x(2) = quat(2); x(3) = quat(3);
         
-        cout << "\nquaternion : "<< x(0) << " " << x(1) << " " << x(2) << " " << x(3) << endl;
+        cout << "\nquaternion : "<< x(3) << " " << x(0) << " " << x(1) << " " << x(2) << endl;
         cout << "acc bias : " << x(4) << " " << x(5) << " " << x(6) << endl;
         cout << "mag bias : " << x(7) << " " << x(8) << " " << x(9) << endl;
         
@@ -271,7 +280,7 @@ public:
         tf::Transform transform;
         transform.setOrigin(tf::Vector3(0.0, 0.0, 0.0));
         tf::Quaternion q;
-        q.setW(x(0)); q.setX(x(1)); q.setY(x(2)); q.setZ(x(3));
+        q.setW(x(3)); q.setX(x(0)); q.setY(x(1)); q.setZ(x(2));
         transform.setRotation(q);
         br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "ekf_frame"));
     }

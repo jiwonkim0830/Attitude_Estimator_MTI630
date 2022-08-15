@@ -170,7 +170,7 @@ int main(int argc, char** argv)
 	
 	//to set initial pose as zero
 	//MahonyFilter mahony(1, 0.3, 1, 1, 1e-3, firstAcc, firstMag, 0.5, 0.1, 5); //gain tuning is needed !!
-	EKF ekf(1e-3, 0.1, 5e-2, 1e-3, 0.001, 0.001, 0.2, 0.1, 5, firstAcc, firstMag);
+	EKF ekf(1e-3, 0.1, 5e-2, 1e-3, 0.0, 0.0, 0.2, 0.1, 0.17, firstAcc, firstMag);
 
 //############################################## Loop time check ###############################################################
 	using Framerate = chrono::duration<chrono::steady_clock::rep, std::ratio<1, 1000>>;

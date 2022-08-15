@@ -20,11 +20,6 @@ private:
     Vector3d normalized_world_acc; 
     Vector3d normalized_world_mag;
 
-
-    const double threshold_a, threshold_m, threshold_dip;              //thresholds
-    double dip_angle;
-    const double world_dip_angle;
-
     ros::NodeHandle n;
 
 public:
@@ -33,10 +28,7 @@ public:
     //Kp, Ki, Ka, Km : gain tuning is needed !!
     : Kp(Kp_input), Ki(Ki_input), Ka(Ka_input), Km(Km_input), dt(dt_input), quat_prev(Quaterniond::Identity()), quat_now(Quaterniond::Identity()),
       inv_quat_prev(Quaterniond::Identity()), acc_hat(measured_acc), mag_hat(measured_mag), correction_term(Vector3d::Zero()), A(Vector3d::Zero()), 
-      Omega_A(Matrix4d::Zero()), world_gravity(measured_acc), world_mag(measured_mag),
-
-      threshold_a(threshold_a_input), threshold_m(threshold_m_input), threshold_dip(threshold_dip_input),
-      world_dip_angle( acos(measured_acc.dot(measured_mag) / (measured_acc.norm() * measured_mag.norm())) )
+      Omega_A(Matrix4d::Zero()), world_gravity(measured_acc), world_mag(measured_mag)
     //Set initial pose as (1, 0, 0, 0)
     {
         normalized_world_acc = measured_acc.normalized();
