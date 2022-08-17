@@ -2,10 +2,15 @@
 #include "RosRawDataPublisher.hpp"
 #include <Eigen/Dense>
 #include "Mahonyfilter.hpp"
+#include "XsensSdkPublisher.hpp"
 #include "EKF.hpp"
 #include <chrono>
 using namespace std;
 using namespace Eigen;
+
+//#define MAHONY
+#define EKF_
+//#define XSENS_SDK
 
 
 int main(int argc, char** argv)
@@ -79,7 +84,10 @@ int main(int argc, char** argv)
 
 	if (device->deviceId().isVru() || device->deviceId().isAhrs())
 	{
-		//configArray.push_back(XsOutputConfiguration(XDI_Quaternion, 100));
+		#ifdef XSENS_SDK
+		configArray.push_back(XsOutputConfiguration(XDI_Quaternion, 0xFFFF));
+		#endif
+
         configArray.push_back(XsOutputConfiguration(XDI_AccelerationHR, 0xFFFF));
 		configArray.push_back(XsOutputConfiguration(XDI_RateOfTurnHR, 0xFFFF));
 		configArray.push_back(XsOutputConfiguration(XDI_MagneticField, 0xFFFF));
@@ -115,6 +123,9 @@ int main(int argc, char** argv)
 	Vector3d AccMeasured = Vector3d::Zero();
 	Vector3d GyrMeasured = Vector3d::Zero();
 	Vector3d MagMeasured = Vector3d::Zero();
+	#ifdef XSENS_SDK
+	Vector4d xsens_sdk_orientation = Vector4d::Zero();
+	#endif
 //##################################################### for filter initialize ###################################################
 	bool isAccInitialized = false;
 	bool isMagInitialized = false;
@@ -169,9 +180,17 @@ int main(int argc, char** argv)
 	cout << "FIrst gyr : " << GyrMeasured[0] << " " << GyrMeasured[1] << " " << GyrMeasured[2] << endl;
 	
 //############################################## Choose the filter ############################################################
-	//MahonyFilter mahony(1, 0.3, 1, 1, 1e-3, firstAcc, firstMag, 0.5, 0.1, 5); //gain tuning is needed !!
-	EKF ekf(1e-3, 1e-2, 5e-2, 1e-2, 0.0, 0.0, 0.2, 0.1, 0.17, firstAcc, firstMag); //gain tuning is needed !!
+	#ifdef MAHONY
+	MahonyFilter mahony(1, 0.3, 1, 1, 1e-3, firstAcc, firstMag, 0.5, 0.1, 5); //gain tuning is needed !!
+	#endif
 
+	#ifdef EKF_
+	EKF ekf(1e-3, 1e-2, 5e-2, 1e-2, 0.0, 0.0, 0.2, 0.1, 0.17, firstAcc, firstMag); //gain tuning is needed !!
+	#endif
+
+	#ifdef XSENS_SDK
+	XsensSdkPublisher xsens_pub;
+	#endif
 //############################################## Loop time check ###############################################################
 	using Framerate = chrono::duration<chrono::steady_clock::rep, std::ratio<1, 1000>>;
 	chrono::steady_clock::time_point start = chrono::steady_clock::now();
@@ -231,13 +250,36 @@ int main(int argc, char** argv)
 					<< ", Mag Z:" << mag[2];
 				MagMeasured(0) = mag[0]; MagMeasured(1) = mag[1]; MagMeasured(2) = mag[2];
 			}
+
+			#ifdef XSENS_SDK
+			if (packet.containsOrientation())
+			{
+				XsQuaternion quaternion = packet.orientationQuaternion();
+				cout << "\r"
+					<< "q0:" << quaternion.w()
+					<< ", q1:" << quaternion.x()
+					<< ", q2:" << quaternion.y()
+					<< ", q3:" << quaternion.z();
+				xsens_sdk_orientation(0) = quaternion.w(); xsens_sdk_orientation(1) = quaternion.x(); xsens_sdk_orientation(2) = quaternion.y(); 
+				xsens_sdk_orientation(3) = quaternion.z(); 
+			}
+			#endif
 		}
 //###################################################### Filtering ############################################################
-		// mahony.Estimate(GyrMeasured, AccMeasured, MagMeasured);
-		// mahony.RosPublishQuaternion();
-		// mahony.PrintQuaternion();
+		#ifdef MAHONY
+		mahony.Estimate(GyrMeasured, AccMeasured, MagMeasured);
+		mahony.RosPublishQuaternion();
+		mahony.PrintQuaternion();
+		#endif
+
+		#ifdef EKF_
 		ekf.Estimate(GyrMeasured, AccMeasured, MagMeasured);
 		ekf.RosPublishQuaternion();
+		#endif
+
+		#ifdef XSENS_SDK
+		xsens_pub.RosPublishQuaternion(xsens_sdk_orientation);
+		#endif
 
 		//to make loop Hz constant (1000Hz)
 		while (chrono::steady_clock::now() < next);
@@ -251,7 +293,7 @@ int main(int argc, char** argv)
 		ros_raw_data_publisher.RosRawDataPublish(accHR, gyrHR, mag);//, gyrHR, mag);
 		//++count;
 	}
-	
+//###############################################################################################################################
 	cout << "\n" << string(79, '-') << "\n";
 	cout << endl;
 
