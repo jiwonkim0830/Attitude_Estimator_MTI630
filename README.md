@@ -4,11 +4,16 @@ Attitude estimator using MTI630 (Mahony filter, EKF)
 
 ## How to use 
 
-1. Download MTI SDK
-2. cd [sdk dir]/examples/xda_cpp
-3. clone this repository
-4. edit cmake file as you want
-5. choose the filter on main.cpp
+1. Download MTI software (https://www.xsens.com/software-downloads)
+2. cd [downloaed file] && ./mtsdk_[os]_[version].sh  to get sdk
+3. cd [sdk dir]/examples/xda_cpp  (you can edit directory as you want)
+4. clone this repository
+5. edit cmake file as you want
+6. choose the filter on main.cpp (edit #define on top)
+
+## Checks
+
+1. Filters are initialized as initial orientation is zero orientation. :  initial quaterion(w,x,y,z) = (1,0,0,0)
 
 
 ## Reference
