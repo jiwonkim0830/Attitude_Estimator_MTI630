@@ -9,7 +9,7 @@ Attitude estimator using MTI630 (Mahony filter, EKF)
 3. cd [sdk dir]/examples/xda_cpp  (you can edit directory as you want)
 4. clone this repository
 5. edit cmake file as you want
-6. choose the filter on main.cpp (edit #define on top)
+6. choose the filter on main.cpp & Initialize_IMU.hpp (edit #define on top)
 
 ## Checks
 
