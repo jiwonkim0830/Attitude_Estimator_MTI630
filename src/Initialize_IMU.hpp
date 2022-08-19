@@ -6,9 +6,9 @@
 using namespace std;
 using namespace Eigen;
 
-#define MAHONY
+// #define MAHONY
 // #define EKF_
-//#define XSENS_SDK
+#define XSENS_SDK
 
 class Initialize_IMU
 {
@@ -52,7 +52,7 @@ public:
         cin.get();
     }
 
-    void initialize(XsVector &accHR, XsVector &gyrHR, XsVector &mag, Vector3d AccMeasured, Vector3d GyrMeasured, Vector3d MagMeasured)
+    void initialize(XsVector &accHR, XsVector &gyrHR, XsVector &mag, Vector3d &AccMeasured, Vector3d &GyrMeasured, Vector3d &MagMeasured)
     {
 // ################################################ Scanning & Setting ################################################        
         cout<<fixed; cout.precision(6);
@@ -234,6 +234,32 @@ public:
         cout << "FIrst gyr : " << GyrMeasured[0] << " " << GyrMeasured[1] << " " << GyrMeasured[2] << endl;
     }
 
-    
+    void initializeSDKFilter(XsQuaternion &quaternion, Quaterniond &first_quaternion)
+    {
+        bool isSDKFilterinitialized = false;
 
+        while (!isSDKFilterinitialized)
+        {
+            if (callback.packetAvailable())
+            {
+                XsDataPacket packet = callback.getNextPacket();
+                if (packet.containsOrientation())
+                {
+                    quaternion = packet.orientationQuaternion();
+                    cout << "\r"
+                        << "q0:" << quaternion.w()
+                        << ", q1:" << quaternion.x()
+                        << ", q2:" << quaternion.y()
+                        << ", q3:" << quaternion.z();
+                    first_quaternion.w() = quaternion.w(); first_quaternion.x() = quaternion.x(); first_quaternion.y() = quaternion.y(); 
+                    first_quaternion.z() = quaternion.z(); 
+
+                    isSDKFilterinitialized = true;
+                }
+            }
+        }
+        cout << "SDK Filter Initialized !" << endl;
+        cout << "First quaternion : " << first_quaternion.w() << " " << first_quaternion.x() << " " << first_quaternion.y() << first_quaternion.z() << endl;
+    }
+    
 };

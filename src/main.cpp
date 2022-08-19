@@ -9,23 +9,29 @@
 using namespace std;
 using namespace Eigen;
 
-#define MAHONY
+// #define MAHONY
 // #define EKF_
-//#define XSENS_SDK
+#define XSENS_SDK
 
 
 int main(int argc, char** argv)
 {
 	XsVector accHR, gyrHR, mag;
+	XsQuaternion quaternionSDK;
     Vector3d AccMeasured;
 	Vector3d GyrMeasured;
 	Vector3d MagMeasured;
 	#ifdef XSENS_SDK
-	Vector4d xsens_sdk_orientation = Vector4d::Zero();
+	Quaterniond xsens_sdk_orientation = Quaterniond::Identity();
+	Quaterniond first_quaternion = Quaterniond::Identity();
 	#endif
 	
 	Initialize_IMU initialize_imu;
 	initialize_imu.initialize(accHR, gyrHR, mag, AccMeasured, GyrMeasured, MagMeasured);
+
+	#ifdef XSENS_SDK
+	initialize_imu.initializeSDKFilter(quaternionSDK, first_quaternion);
+	#endif
 
 // ################################################### For ROS ##################################################################
 	ros::init(argc, argv, "visualize_node");
@@ -51,12 +57,6 @@ int main(int argc, char** argv)
 
 
 //#################################################### Measurement  ############################################################
-	// int64_t startTime = XsTime::timeStampNow();
-	//while (XsTime::timeStampNow() - startTime <= 10000)
-	// int count =  0;
-	// while (count < 10)
-
-
 	while (1)
 	{
 		if (initialize_imu.callback.packetAvailable())
@@ -65,14 +65,6 @@ int main(int argc, char** argv)
 
 			// Retrieve a packet
 			XsDataPacket packet = initialize_imu.callback.getNextPacket();
-            
-            // if (packet.containsSampleTimeFine())
-            // {
-            //     cout << endl;
-            //     uint32_t sampletimefine = packet.sampleTimeFine();
-            //     cout << "\r";
-            //     printf("%d", sampletimefine);
-            // }
             
             if (packet.containsAccelerationHR())
 			{
@@ -109,14 +101,15 @@ int main(int argc, char** argv)
 			#ifdef XSENS_SDK
 			if (packet.containsOrientation())
 			{
-				XsQuaternion quaternion = packet.orientationQuaternion();
+				quaternionSDK = packet.orientationQuaternion();
 				cout << "\r"
-					<< "q0:" << quaternion.w()
-					<< ", q1:" << quaternion.x()
-					<< ", q2:" << quaternion.y()
-					<< ", q3:" << quaternion.z();
-				xsens_sdk_orientation(0) = quaternion.w(); xsens_sdk_orientation(1) = quaternion.x(); xsens_sdk_orientation(2) = quaternion.y(); 
-				xsens_sdk_orientation(3) = quaternion.z(); 
+					<< "q0:" << quaternionSDK.w()
+					<< ", q1:" << quaternionSDK.x()
+					<< ", q2:" << quaternionSDK.y()
+					<< ", q3:" << quaternionSDK.z();
+				xsens_sdk_orientation.w() = quaternionSDK.w(); xsens_sdk_orientation.x() = quaternionSDK.x(); xsens_sdk_orientation.y() = quaternionSDK.y(); 
+				xsens_sdk_orientation.z() = quaternionSDK.z(); 
+				xsens_sdk_orientation = first_quaternion.inverse() * xsens_sdk_orientation;
 			}
 			#endif
 		}
