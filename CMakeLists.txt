@@ -37,7 +37,7 @@ link_libraries(
 )
 
 link_directories(
-  ../../lib
+  ../../../../lib
 )
 
 add_executable(main src/main.cpp)

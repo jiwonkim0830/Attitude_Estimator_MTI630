@@ -5,12 +5,21 @@ Attitude estimator using MTI630 (Mahony filter, EKF)
 ## How to use 
 
 1. Download MTI software (https://www.xsens.com/software-downloads)
+2. With mtmanager, do intial setting
+    - to use mtmanager you have install some dependencies based on MTM.README file.
+    - have to run with sudo
 2. cd [downloaed file] && ./mtsdk_[os]_[version].sh  to get sdk 
     - prerequisite : sharutils
     - you can check MTSDK.README file in sdk directory
+
+cd /examples/mtsdk/ && make xda_cpp
+
 3. cd [sdk dir]/examples/xda_cpp  (you can edit directory as you want)
 4. clone this repository
+    - prerequisite : libtf2-ros-dev
+    - have to run with sudo
 5. edit cmake file as you want
+
 6. choose the filter on main.cpp & Initialize_IMU.hpp (edit #define on top)
 
 ## Checks
